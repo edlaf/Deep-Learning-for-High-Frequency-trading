@@ -33,6 +33,117 @@ class QNetwork_Linear(nn.Module):
         x = F.relu(self.fc2(x))
         return self.fc3(x)
 
+class QNetwork_Linear_Deep(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(QNetwork_Linear_Deep, self).__init__()
+        self.fc1 = nn.Linear(state_dim, 128)
+        self.fc2 = nn.Linear(128, 128)
+        self.fc3 = nn.Linear(128, 64)
+        self.fc4 = nn.Linear(64, action_dim)
+    
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        return self.fc4(x)
+
+
+class QNetwork_Dueling(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(QNetwork_Dueling, self).__init__()
+        self.feature = nn.Sequential(
+            nn.Linear(state_dim, 128),
+            nn.ReLU()
+        )
+        self.value_stream = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1)
+        )
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, action_dim)
+        )
+        
+    def forward(self, x):
+        features = self.feature(x)
+        value = self.value_stream(features)
+        advantage = self.advantage_stream(features)
+        return value + advantage - advantage.mean(dim=1, keepdim=True)
+
+class QNetwork_Dropout(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(QNetwork_Dropout, self).__init__()
+        self.fc1 = nn.Linear(state_dim, 128)
+        self.fc2 = nn.Linear(128, 128)
+        self.dropout = nn.Dropout(0.2)
+        self.fc3 = nn.Linear(128, action_dim)
+    
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.dropout(x)
+        return self.fc3(x)
+
+class QNetwork_BatchNorm(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(QNetwork_BatchNorm, self).__init__()
+        self.fc1 = nn.Linear(state_dim, 128)
+        self.bn1 = nn.BatchNorm1d(128)
+        self.fc2 = nn.Linear(128, 128)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.fc3 = nn.Linear(128, action_dim)
+    
+    def forward(self, x):
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.fc2(x)))
+        return self.fc3(x)
+
+class QNetwork_CNN(nn.Module):
+    def __init__(self, input_channels, action_dim):
+        super(QNetwork_CNN, self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=2, stride=1)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=2, stride=1)
+        self.fc = nn.Linear(32, 64)
+        self.out = nn.Linear(64, action_dim)
+    
+    def forward(self, x):
+        x = x.view(-1, 1, 3, 3)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc(x))
+        return self.out(x)
+class QNetwork_RNN(nn.Module):
+    def __init__(self, input_dim, hidden_dim, action_dim, num_layers=1):
+        super(QNetwork_RNN, self).__init__()
+        self.rnn = nn.GRU(input_dim, hidden_dim, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, action_dim)
+        
+    def forward(self, x):
+        if x.dim() == 2:
+            x = x.unsqueeze(1)
+        rnn_out, _ = self.rnn(x)
+        last_out = rnn_out[:, -1, :]
+        return self.fc(last_out)
+
+class QNetwork_Transformer(nn.Module):
+    def __init__(self, input_dim, d_model, nhead, num_layers, action_dim):
+        super(QNetwork_Transformer, self).__init__()
+        self.embedding = nn.Linear(input_dim, d_model)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.fc = nn.Linear(d_model, action_dim)
+        
+    def forward(self, x):
+        if x.dim() == 2:
+            x = x.unsqueeze(1)
+        x = self.embedding(x)
+        x = x.permute(1, 0, 2)
+        x = self.transformer_encoder(x)
+        x = x.mean(dim=0)
+        return self.fc(x)
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -73,6 +184,41 @@ class Deep_Q_Learning_Agent:
         if network_architecture == 'Classic':
             self.q_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
             self.target_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'Classic_Deeper':
+            self.q_network = QNetwork_Linear_Deep(self.state_dim, self.action_dim).to(self.device)
+            self.target_network = QNetwork_Linear_Deep(self.state_dim, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'Dueling':
+            self.q_network = QNetwork_Dueling(self.state_dim, self.action_dim).to(self.device)
+            self.target_network = QNetwork_Dueling(self.state_dim, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'Dropout':
+            self.q_network = QNetwork_Dropout(self.state_dim, self.action_dim).to(self.device)
+            self.target_network = QNetwork_Dropout(self.state_dim, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'Batch_norm':
+            self.q_network = QNetwork_Dropout(self.state_dim, self.action_dim).to(self.device)
+            self.target_network = QNetwork_Dropout(self.state_dim, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'CNN':
+            self.q_network = QNetwork_CNN(self.state_dim, self.action_dim).to(self.device)
+            self.target_network = QNetwork_CNN(self.state_dim, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'RNN':
+            self.q_network = QNetwork_RNN(self.state_dim, 64, self.action_dim).to(self.device)
+            self.target_network = QNetwork_RNN(self.state_dim, 64, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'Transformer':
+            self.q_network = QNetwork_Transformer(self.state_dim, 64, 8, 2, self.action_dim).to(self.device)
+            self.target_network = QNetwork_Transformer(self.state_dim, 64, 8, 2, self.action_dim).to(self.device)
             self.target_network.load_state_dict(self.q_network.state_dict())
             self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
         
@@ -327,7 +473,6 @@ class Deep_Q_Learning_Agent:
                     agent_action_buy.append(next_state[0])
                     agent_action_buy_time.append(next_state[1])
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
-        print(self.average_pnl_random)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
@@ -358,7 +503,6 @@ class Deep_Q_Learning_Agent:
             )
         fig.show()
         
-            
     def random_action(self, frequency_action = 2):
         random_final_rewards = []
         for _ in range(1000):
@@ -378,15 +522,19 @@ def compare_networks(tab_network, nb_episode = 1000, window_size = 20, frequency
     for i in range (len(tab_network)):
         agent = Deep_Q_Learning_Agent(tab_network[i], No_nothing = No_nothing)
         res.append(agent.train(visu = False, frequency_action = frequency_action, visu_graph=False, nb_episode = nb_episode, window_size = window_size, comparaison = True))
-    agent = Deep_Q_Learning_Agent(tab_network[0], No_nothing = No_nothing)
-    res.append(agent.random_action(frequency_action = frequency_action))
+    res.append(agent.average_pnl_random)
     tab_network.append('Random Strategy')
     fig = go.Figure()
     for i in range (len(tab_network)-1):
-        fig.add_trace(go.Scatter(x=np.arange(0,len(res[i]),1), y=res[i], name = tab_network[i], mode='lines', line=dict(width = 1)))
-    fig.add_trace(go.Scatter(x=np.arange(0,len(res[-2]),1), y=res[-1]*np.ones(len(np.arange(0,len(res[-2]),1))), name = tab_network[-1], mode='lines', line=dict(width = 1)))
+        rolling_avg = np.convolve(
+            res[i],
+            np.ones(window_size) / window_size,
+            mode='valid'
+        )
+        fig.add_trace(go.Scatter(x=np.arange(window_size - 1, len(res[i])), y=rolling_avg, name = tab_network[i], mode='lines', line=dict(width = 1)))
+    fig.add_trace(go.Scatter(x=np.arange(window_size - 1, len(res[-2])), y=res[-1]*np.ones(len(np.arange(window_size - 1, len(res[-2])))), name = tab_network[-1], mode='lines', line=dict(width = 1)))
     fig.update_layout(
-            title="Comparaison between the different architecture",
+            title="Comparaison between the differents architectures",
             xaxis_title="Episodes",
             yaxis_title="P&L",
             plot_bgcolor='#D3D3D3',
