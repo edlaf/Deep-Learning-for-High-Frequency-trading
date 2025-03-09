@@ -21,9 +21,9 @@ import backend.QRModel.QR_only as qr
 import backend.Market_env.Market as market
 import backend.utils.intensity_fct_params as param
 
-class QNetwork(nn.Module):
+class QNetwork_Linear(nn.Module):
     def __init__(self, state_dim, action_dim):
-        super(QNetwork, self).__init__()
+        super(QNetwork_Linear, self).__init__()
         self.fc1 = nn.Linear(state_dim, 64)
         self.fc2 = nn.Linear(64, 64)
         self.fc3 = nn.Linear(64, action_dim)
@@ -51,7 +51,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class Deep_Q_Learning_Agent:
-    def __init__(self):
+    def __init__(self, network_architecture = 'Classic'):
         self.intensity_cancel,self.intensity_order,self.intensity_add, self.price_0, self.tick, self.theta, self.nb_of_action, self.liquidy_last_lim, self.size_max, self.lambda_event, self.event_prob, self.initial_ask, self.initial_bid = param.params_qr()
         
         self.simulation = qr_agent.QrWithAgent(self.intensity_cancel, self.intensity_order, self.intensity_add,
@@ -64,10 +64,15 @@ class Deep_Q_Learning_Agent:
         self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update = param.params_QDRL()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        self.q_network = QNetwork(self.state_dim, self.action_dim).to(self.device)
-        self.target_network = QNetwork(self.state_dim, self.action_dim).to(self.device)
-        self.target_network.load_state_dict(self.q_network.state_dict())
-        self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        if network_architecture == 'Classic':
+            self.q_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
+            self.target_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        
+        else:
+            print('No Network currently implement with the given name')
+        
         self.replay_buffer = ReplayBuffer(self.replay_capacity)
         
     def select_action(self, state, epsilon):
