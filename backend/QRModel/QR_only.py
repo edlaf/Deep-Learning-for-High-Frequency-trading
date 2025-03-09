@@ -156,6 +156,7 @@ class Qr:
         self.lambda_event    = lambda_event
         self.length_event    = 0
         self.is_event        = False
+        self.price_0         = price_0
         
         
     def intiate_market(self, initial_ask, initial_bid):
@@ -165,6 +166,8 @@ class Qr:
         self.bid = initial_bid
         self.ask = initial_ask
         self.df_evolution.loc[len(self.df_evolution)] = [self.time, 'N/A', 'N/A', 'N/A', self.price, 'N/A', self.bid[0], self.ask[0], self.bid[1], self.ask[1], self.bid[2], self.ask[2], 'Opening']
+        self.time = 0
+        self.price = self.price_0
         
     def state_(self):
         '''

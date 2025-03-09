@@ -20,7 +20,7 @@ class MarketEnv:
         self.simulation.intiate_market(self.initial_ask, self.initial_bid)
         self.agent.position = 0
         self.agent.order_active = None
-        self.agent.cash = 1000.0
+        self.agent.cash = 0
         self.agent.entry_price = None
         self.current_step = 0
         return self.get_state()
@@ -57,7 +57,7 @@ class MarketEnv:
         done = self.current_step >= self.nb_steps
         return state, reward, done, {}
 
-    def step_trained(self, action, frequency_action):
+    def step_trained(self, action, frequency_action, nb_events):
         prev_net = self.agent.cash + self.agent.position * self.simulation.price
         simulated_step = self.simulation.step()
         self.current_step += 1
@@ -72,5 +72,5 @@ class MarketEnv:
         new_net = self.agent.cash + self.agent.position * self.simulation.price
         reward = new_net - prev_net
         state = self.get_state()
-        done = self.current_step >= self.nb_steps
+        done = self.current_step >= nb_events
         return state, reward, done, {}, simulated_step

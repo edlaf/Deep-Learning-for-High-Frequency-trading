@@ -69,7 +69,7 @@ class Deep_Q_Learning_Agent:
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
-                
+        self.device = 'cpu'
         if network_architecture == 'Classic':
             self.q_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
             self.target_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
@@ -77,10 +77,11 @@ class Deep_Q_Learning_Agent:
             self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
         
         else:
-            print('No Network currently implement with the given name')
+            print('No Network currently implemented with the given name')
         
         self.replay_buffer = ReplayBuffer(self.replay_capacity)
         self.arch = network_architecture
+        self.average_pnl_random = 0
         
     def select_action(self, state, epsilon):
         if random.random() < epsilon:
@@ -138,23 +139,25 @@ class Deep_Q_Learning_Agent:
             # print(f"Episode {episode+1}/{num_episodes} - Total Reward: {total_reward:.2f} - Epsilon: {epsilon:.2f}")
             if (episode+1) % self.target_update == 0:
                 self.target_network.load_state_dict(self.q_network.state_dict())
+        # torch.save(self.q_network.state_dict(), 'model.pth')
+        random_final_rewards = []
+            
+        for _ in range(1000):
+            state = self.env.reset()
+            done = False
+            total_reward = 0.0
+            while not done:
+                random_action = random.randrange(self.action_dim)
+                state, reward, done, _ = self.env.step(random_action, frequency_action)
+                total_reward += reward
+            random_final_rewards.append(total_reward)
+        avg_random_price = np.mean(random_final_rewards)
+        self.average_pnl_random = avg_random_price
         if comparaison:
             return episode_rewards
         if visu:
             print("\n     ---> TRAINING FINISHED\n")
         if visu_graph:
-            random_final_rewards = []
-            
-            for _ in range(1000):
-                state = self.env.reset()
-                done = False
-                total_reward = 0.0
-                while not done:
-                    random_action = random.randrange(self.action_dim)
-                    state, reward, done, _ = self.env.step(random_action, frequency_action)
-                    total_reward += reward
-                random_final_rewards.append(total_reward)
-            avg_random_price = np.mean(random_final_rewards)
             print("--- VISUALISING REWARD AND DECISION EVOLUTION ---\n")
             
             fig = go.Figure()
@@ -244,9 +247,8 @@ class Deep_Q_Learning_Agent:
             print(f"          Order Ask ---> {np.array(order_asK)[-1]/nb_of_action_agent}%\n")
             print('________________________________________________________________')
             
-            
     def test(self, nb_event, frequency_action = 2):
-        print(f"\n--- TESTING THE AGENT OVER A SIMULTION OF {nb_event} ---\n")
+        print(f"\n                                             --- TESTING THE AGENT OVER A SIMULATION OF {nb_event} EVENTS ---\n")
         pbar = tqdm(range(nb_event), desc="---> Testing")
         state = self.env.reset()
         total_reward = 0.0
@@ -261,9 +263,10 @@ class Deep_Q_Learning_Agent:
         agent_action_nothing_time = []
         pnl_balance = []
         pnl_time = []
+        # self.q_network.load_state_dict(torch.load('model.pth'))
         while not done:
-            action = self.select_action(state, self.epsilon)
-            next_state, reward, done, _, simulated_step = self.env.step_trained(action, frequency_action)
+            action = self.select_action(state, 0)
+            next_state, reward, done, _, simulated_step = self.env.step_trained(action, frequency_action, nb_event)
             state = next_state
             total_reward += reward
             price_evolution.append(simulated_step[4])
@@ -284,7 +287,7 @@ class Deep_Q_Learning_Agent:
                 agent_action_buy_time.append(next_state[1])
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'red')))
+        fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
         fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Buy',mode='markers'))
         fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Sell',mode='markers'))
@@ -299,9 +302,10 @@ class Deep_Q_Learning_Agent:
             )
         fig.show()
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=pnl_time, y=pnl_balance, name = 'P&L',mode='lines', line=dict(width = 1, color = 'red')))
+        fig.add_trace(go.Scatter(x=pnl_time, y=pnl_balance, name = 'P&L',mode='lines', line=dict(width = 1, color = 'darkred')))
+        fig.add_trace(go.Scatter(x=pnl_time, y = self.average_pnl_random*np.array(pnl_time)/self.nb_of_action, name = 'Average P&L with a Random Strategy',mode='lines', line=dict(width = 1, color = 'black')))
         fig.update_layout(
-                title="P&L Evolution",
+                title=f"P&L Evolution (Trained with trajectories of {self.nb_of_action} events)",
                 xaxis_title="Time",
                 yaxis_title="P&L",
                 plot_bgcolor='#D3D3D3',
