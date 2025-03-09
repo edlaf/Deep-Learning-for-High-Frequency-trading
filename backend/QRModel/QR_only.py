@@ -1,6 +1,18 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import random
+from collections import deque
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+import sys
+import os
+import sys
+root = os.path.abspath(os.path.join(os.getcwd(), ".."))
+if root not in sys.path:
+    sys.path.insert(0, root)
+import backend.utils.intensity_fct_params as param
+
 
 '''
 Cropyright Edouard Laferté 
@@ -241,13 +253,13 @@ class Qr:
                         self.bid[1] = self.bid[0]
                         self.bid[0] = 0
                     else :
-                        self.price -= self.tick
-                        self.ask[2] = self.ask[1]
-                        self.ask[1] = self.ask[0]
+                        # self.price -= self.tick
+                        # self.ask[2] = self.ask[1]
+                        # self.ask[1] = self.ask[0]
                         self.ask[0] = 0
-                        self.bid[0] = self.bid[1]
-                        self.bid[1] = self.bid[2]
-                        self.bid[2] = self.liquidy_last
+                        # self.bid[0] = self.bid[1]
+                        # self.bid[1] = self.bid[2]
+                        # self.bid[2] = self.liquidy_last
                 else:
                     self.ask[limit_f] -= next_size_order
             
@@ -270,13 +282,13 @@ class Qr:
                         self.bid[1] = self.bid[0]
                         self.bid[0] = 0
                     else :
-                        self.price -= self.tick
-                        self.ask[2] = self.ask[1]
-                        self.ask[1] = self.ask[0]
+                        # self.price -= self.tick
+                        # self.ask[2] = self.ask[1]
+                        # self.ask[1] = self.ask[0]
                         self.ask[0] = 0
-                        self.bid[0] = self.bid[1]
-                        self.bid[1] = self.bid[2]
-                        self.bid[2] = self.liquidy_last
+                        # self.bid[0] = self.bid[1]
+                        # self.bid[1] = self.bid[2]
+                        # self.bid[2] = self.liquidy_last
                 else:
                     self.ask[limit_f] -= next_size_cancel
                     
@@ -311,12 +323,12 @@ class Qr:
                 if next_ask == 0 :
                     tab_next_step[-1] = 'new_limit'
                     if np.random.uniform(0,1) > self.theta :
-                        self.price += self.tick
-                        self.ask[0] = self.ask[1]
-                        self.ask[1] = self.ask[2]
-                        self.ask[2] = self.liquidy_last
-                        self.bid[2] = self.bid[1]
-                        self.bid[1] = self.bid[0]
+                        # self.price += self.tick
+                        # self.ask[0] = self.ask[1]
+                        # self.ask[1] = self.ask[2]
+                        # self.ask[2] = self.liquidy_last
+                        # self.bid[2] = self.bid[1]
+                        # self.bid[1] = self.bid[0]
                         self.bid[0] = 0
                     else :
                         self.price -= self.tick
@@ -340,12 +352,12 @@ class Qr:
                 if next_ask == 0 and limit_f == 0:
                     tab_next_step[-1] = 'new_limit'
                     if np.random.uniform(0,1) > self.theta :
-                        self.price += self.tick
-                        self.ask[0] = self.ask[1]
-                        self.ask[1] = self.ask[2]
-                        self.ask[2] = self.liquidy_last
-                        self.bid[2] = self.bid[1]
-                        self.bid[1] = self.bid[0]
+                        # self.price += self.tick
+                        # self.ask[0] = self.ask[1]
+                        # self.ask[1] = self.ask[2]
+                        # self.ask[2] = self.liquidy_last
+                        # self.bid[2] = self.bid[1]
+                        # self.bid[1] = self.bid[0]
                         self.bid[0] = 0
                     else :
                         self.price -= self.tick
@@ -419,3 +431,12 @@ class Qr:
     def run_and_trade_market(self, initial_ask, initial_bid):
         self.intiate_market(initial_ask, initial_bid)
         
+def Run_QR_simulated(nb_action, price_only = True):
+    
+    intensity_cancel,intensity_order,intensity_add, price_0, tick, theta, nb_of_action, liquidy_last_lim, size_max, lambda_event, event_prob, initial_ask, initial_bid = param.params_qr()
+    nb_of_action = nb_action
+    simulation = Qr(intensity_cancel, intensity_order, intensity_add,
+                            price_0, tick, theta, nb_of_action, liquidy_last_lim,
+                            size_max, lambda_event, event_prob)
+    simulation.visu(initial_ask, initial_bid, price_only)
+    
