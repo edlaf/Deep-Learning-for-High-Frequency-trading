@@ -74,6 +74,7 @@ class Deep_Q_Learning_Agent:
             print('No Network currently implement with the given name')
         
         self.replay_buffer = ReplayBuffer(self.replay_capacity)
+        self.arch = network_architecture
         
     def select_action(self, state, epsilon):
         if random.random() < epsilon:
@@ -84,14 +85,15 @@ class Deep_Q_Learning_Agent:
                 q_values = self.q_network(state_tensor)
             return q_values.argmax().item()
         
-    def train(self, visu=True, nb_episode = 1000, window_size = 10, frequency_action = 2):
+    def train(self, visu=True, visu_graph = True, nb_episode = 1000, window_size = 10, frequency_action = 2, comparaison = False):
         num_episodes = nb_episode
         episode_rewards = []
-        print("                                                            --- Q-DEEP-REINFORCED AGENT ---\n")
-        print(f"\n--- TRAINING THE AGENT OVER {nb_episode} EPISODES ---")
-        print("\n     ---> TRAINING...\n")
+        if visu:
+            print("                                                            --- Q-DEEP-REINFORCED AGENT ---\n")
+            print(f"\n--- TRAINING THE AGENT OVER {nb_episode} EPISODES ---")
+            print("\n     ---> TRAINING...\n")
         tab_action_tot = []
-        pbar = tqdm(range(num_episodes), desc="           Training")
+        pbar = tqdm(range(num_episodes), desc=f"           Training ({self.arch} Network)")
         losses = []
         for episode in pbar:
             state = self.env.reset()
@@ -130,8 +132,11 @@ class Deep_Q_Learning_Agent:
             # print(f"Episode {episode+1}/{num_episodes} - Total Reward: {total_reward:.2f} - Epsilon: {epsilon:.2f}")
             if (episode+1) % self.target_update == 0:
                 self.target_network.load_state_dict(self.q_network.state_dict())
-        print("\n     ---> TRAINING FINISHED\n")
+        if comparaison:
+            return episode_rewards
         if visu:
+            print("\n     ---> TRAINING FINISHED\n")
+        if visu_graph:
             random_final_rewards = []
             
             for _ in range(1000):
@@ -249,3 +254,41 @@ class Deep_Q_Learning_Agent:
             tab_action.append(action)
 
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
+            
+    def random_action(self, frequency_action = 2):
+        random_final_rewards = []
+            
+        for _ in range(1000):
+            state = self.env.reset()
+            done = False
+            total_reward = 0.0
+            while not done:
+                random_action = random.randrange(self.action_dim)
+                state, reward, done, _ = self.env.step(random_action, frequency_action)
+                total_reward += reward
+                random_final_rewards.append(total_reward)
+        avg_random_price = np.mean(random_final_rewards)
+        return avg_random_price
+
+def compare_networks(tab_network, nb_episode = 1000, window_size = 20, frequency_action = 2):
+    res = []
+    for i in range (len(tab_network)):
+        agent = Deep_Q_Learning_Agent(tab_network[i])
+        res.append(agent.train(visu = False, frequency_action = frequency_action, visu_graph=False, nb_episode = nb_episode, window_size = window_size, comparaison = True))
+    agent = Deep_Q_Learning_Agent(tab_network[0])
+    res.append(agent.random_action(frequency_action = frequency_action))
+    tab_network.append('Random Strategy')
+    fig = go.Figure()
+    for i in range (len(tab_network)-1):
+        fig.add_trace(go.Scatter(x=np.arange(0,len(res[i]),1), y=res[i], name = tab_network[i], mode='lines', line=dict(width = 1)))
+    fig.add_trace(go.Scatter(x=np.arange(0,len(res[-2]),1), y=res[-1]*np.ones(len(np.arange(0,len(res[-2]),1))), name = tab_network[-1], mode='lines', line=dict(width = 1)))
+    fig.update_layout(
+            title="Comparaison between the different architecture",
+            xaxis_title="Episodes",
+            yaxis_title="P&L",
+            plot_bgcolor='#D3D3D3',
+            paper_bgcolor='#D3D3D3',
+            xaxis=dict(showgrid=True, gridcolor='#808080'),
+            yaxis=dict(showgrid=True, gridcolor='#808080')
+        )
+    fig.show()
