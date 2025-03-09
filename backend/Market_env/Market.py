@@ -40,13 +40,6 @@ class MarketEnv:
         return state
     
     def step(self, action, frequency_action):
-        """
-        Pour une étape :
-        - Sauvegarde de la valeur nette de l'agent
-        - Évolution d'une étape du marché
-        - Exécution de l'action de l'agent uniquement tous les 20 pas
-        - Calcul de la récompense comme précédemment.
-        """
         prev_net = self.agent.cash + self.agent.position * self.simulation.price
         _ = self.simulation.step()
         self.current_step += 1
@@ -63,3 +56,21 @@ class MarketEnv:
         state = self.get_state()
         done = self.current_step >= self.nb_steps
         return state, reward, done, {}
+
+    def step_trained(self, action, frequency_action):
+        prev_net = self.agent.cash + self.agent.position * self.simulation.price
+        simulated_step = self.simulation.step()
+        self.current_step += 1
+
+        if self.current_step % frequency_action == 0:
+            self.current_step += 1
+            action_map = {0: "do_nothing", 1: "order_bid", 2:"order_ask"}
+            action_name = action_map.get(action)
+            self.simulation.execute_agent_action(action_name, self.agent)
+        else:
+            action_name = "do_nothing"
+        new_net = self.agent.cash + self.agent.position * self.simulation.price
+        reward = new_net - prev_net
+        state = self.get_state()
+        done = self.current_step >= self.nb_steps
+        return state, reward, done, {}, simulated_step

@@ -440,3 +440,10 @@ def Run_QR_simulated(nb_action, price_only = True):
                             size_max, lambda_event, event_prob)
     simulation.visu(initial_ask, initial_bid, price_only)
     
+def Run_QR_simulated_to_df(nb_action):
+    intensity_cancel,intensity_order,intensity_add, price_0, tick, theta, nb_of_action, liquidy_last_lim, size_max, lambda_event, event_prob, initial_ask, initial_bid = param.params_qr()
+    nb_of_action = nb_action
+    simulation = Qr(intensity_cancel, intensity_order, intensity_add,
+                            price_0, tick, theta, nb_of_action, liquidy_last_lim,
+                            size_max, lambda_event, event_prob)
+    return simulation.run_market(initial_ask, initial_bid)
