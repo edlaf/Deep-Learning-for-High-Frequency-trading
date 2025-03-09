@@ -62,8 +62,14 @@ class Deep_Q_Learning_Agent:
         self.nb_steps = self.nb_of_action
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
         self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update = param.params_QDRL()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+                
         if network_architecture == 'Classic':
             self.q_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
             self.target_network = QNetwork_Linear(self.state_dim, self.action_dim).to(self.device)
@@ -245,15 +251,66 @@ class Deep_Q_Learning_Agent:
         state = self.env.reset()
         total_reward = 0.0
         done = False
-        tab_action = []
+        price_evolution           = []
+        agent_action_buy          = []
+        agent_action_sell         = []
+        agent_action_nothing      = []
+        price_evolution_time      = []
+        agent_action_buy_time     = []
+        agent_action_sell_time    = []
+        agent_action_nothing_time = []
+        pnl_balance = []
+        pnl_time = []
         while not done:
             action = self.select_action(state, self.epsilon)
             next_state, reward, done, _, simulated_step = self.env.step_trained(action, frequency_action)
             state = next_state
             total_reward += reward
-            tab_action.append(action)
+            price_evolution.append(simulated_step[4])
+            price_evolution_time.append(next_state[1])
+            pnl_balance.append(total_reward)
+            pnl_time.append(next_state[1])
+            if action != 0:
+                price_evolution.append(next_state[0])
+                price_evolution_time.append(next_state[1])
+            if action == 0:
+                agent_action_nothing.append(next_state[0])
+                agent_action_nothing_time.append(next_state[1])
+            if action == 1:
+                agent_action_sell.append(next_state[0])
+                agent_action_sell_time.append(next_state[1])
+            if action == 2:
+                agent_action_buy.append(next_state[0])
+                agent_action_buy_time.append(next_state[1])
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
-            
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'red')))
+        fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Buy',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Sell',mode='markers'))
+        fig.update_layout(
+                title="Price Evolution with the Agent Interaction",
+                xaxis_title="Time",
+                yaxis_title="Loss",
+                plot_bgcolor='#D3D3D3',
+                paper_bgcolor='#D3D3D3',
+                xaxis=dict(showgrid=True, gridcolor='#808080'),
+                yaxis=dict(showgrid=True, gridcolor='#808080')
+            )
+        fig.show()
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=pnl_time, y=pnl_balance, name = 'P&L',mode='lines', line=dict(width = 1, color = 'red')))
+        fig.update_layout(
+                title="P&L Evolution",
+                xaxis_title="Time",
+                yaxis_title="P&L",
+                plot_bgcolor='#D3D3D3',
+                paper_bgcolor='#D3D3D3',
+                xaxis=dict(showgrid=True, gridcolor='#808080'),
+                yaxis=dict(showgrid=True, gridcolor='#808080')
+            )
+        fig.show()
+        
             
     def random_action(self, frequency_action = 2):
         random_final_rewards = []
