@@ -39,7 +39,7 @@ class MarketEnv:
         ], dtype=np.float32)
         return state
     
-    def step(self, action, frequency_action):
+    def step(self, action, frequency_action, No_nothing = False):
         prev_net = self.agent.cash + self.agent.position * self.simulation.price
         _ = self.simulation.step()
         self.current_step += 1
@@ -47,6 +47,8 @@ class MarketEnv:
         if self.current_step % frequency_action == 0:
             self.current_step += 1
             action_map = {0: "do_nothing", 1: "order_bid", 2:"order_ask"}
+            if No_nothing:
+                action_map = {0: "order_bid", 1:"order_ask"}
             action_name = action_map.get(action)
             self.simulation.execute_agent_action(action_name, self.agent)
         else:
@@ -57,7 +59,7 @@ class MarketEnv:
         done = self.current_step >= self.nb_steps
         return state, reward, done, {}
 
-    def step_trained(self, action, frequency_action, nb_events):
+    def step_trained(self, action, frequency_action, nb_events, No_nothing = False):
         prev_net = self.agent.cash + self.agent.position * self.simulation.price
         simulated_step = self.simulation.step()
         self.current_step += 1
@@ -65,6 +67,8 @@ class MarketEnv:
         if self.current_step % frequency_action == 0:
             self.current_step += 1
             action_map = {0: "do_nothing", 1: "order_bid", 2:"order_ask"}
+            if No_nothing:
+                action_map = {0: "order_bid", 1:"order_ask"}
             action_name = action_map.get(action)
             self.simulation.execute_agent_action(action_name, self.agent)
         else:

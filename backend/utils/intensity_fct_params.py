@@ -56,12 +56,14 @@ def params_qr():
     initial_bid = [10, 20, 30]
     return intensity_cancel,intensity_order,intensity_add, price_0, tick, theta, nb_of_action, liquidy_last_lim, size_max, lambda_event, event_prob, initial_ask, initial_bid
 
-def params_QDRL():
+def params_QDRL(No_nothing = False):
     state_dim = 9
     action_dim = 3
+    if No_nothing:
+        action_dim = 2
     lr = 1e-3
     gamma = 0.99
-    epsilon = 1.0
+    epsilon = 0.7
     epsilon_decay = 0.995
     epsilon_min = 0.01
     batch_size = 32

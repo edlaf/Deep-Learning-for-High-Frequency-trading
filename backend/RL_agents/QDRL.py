@@ -51,7 +51,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class Deep_Q_Learning_Agent:
-    def __init__(self, network_architecture = 'Classic'):
+    def __init__(self, network_architecture = 'Classic', No_nothing = False):
         self.intensity_cancel,self.intensity_order,self.intensity_add, self.price_0, self.tick, self.theta, self.nb_of_action, self.liquidy_last_lim, self.size_max, self.lambda_event, self.event_prob, self.initial_ask, self.initial_bid = param.params_qr()
         
         self.simulation = qr_agent.QrWithAgent(self.intensity_cancel, self.intensity_order, self.intensity_add,
@@ -61,7 +61,7 @@ class Deep_Q_Learning_Agent:
         
         self.nb_steps = self.nb_of_action
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
-        self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update = param.params_QDRL()
+        self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update = param.params_QDRL(No_nothing = No_nothing)
         
         if torch.backends.mps.is_available():
             self.device = torch.device("mps")
@@ -82,6 +82,8 @@ class Deep_Q_Learning_Agent:
         self.replay_buffer = ReplayBuffer(self.replay_capacity)
         self.arch = network_architecture
         self.average_pnl_random = 0
+        self.No_nothing = No_nothing
+        self.average_time = 0
         
     def select_action(self, state, epsilon):
         if random.random() < epsilon:
@@ -109,7 +111,7 @@ class Deep_Q_Learning_Agent:
             tab_action = []
             while not done:
                 action = self.select_action(state, self.epsilon)
-                next_state, reward, done, _ = self.env.step(action, frequency_action)
+                next_state, reward, done, _ = self.env.step(action, frequency_action, No_nothing = self.No_nothing)
                 self.replay_buffer.push(state, action, reward, next_state, done)
                 state = next_state
                 total_reward += reward
@@ -141,16 +143,17 @@ class Deep_Q_Learning_Agent:
                 self.target_network.load_state_dict(self.q_network.state_dict())
         # torch.save(self.q_network.state_dict(), 'model.pth')
         random_final_rewards = []
-            
-        for _ in range(1000):
+        nb_sim = 1000
+        for _ in range(nb_sim):
             state = self.env.reset()
             done = False
             total_reward = 0.0
             while not done:
                 random_action = random.randrange(self.action_dim)
-                state, reward, done, _ = self.env.step(random_action, frequency_action)
+                state, reward, done, _ = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
                 total_reward += reward
             random_final_rewards.append(total_reward)
+            self.average_time += state[1]/nb_sim
         avg_random_price = np.mean(random_final_rewards)
         self.average_pnl_random = avg_random_price
         if comparaison:
@@ -195,32 +198,58 @@ class Deep_Q_Learning_Agent:
             )
             fig.show()
             
-            nothing = []
-            order_asK = []
-            order_biD = []
-            for i in range (len(tab_action_tot)):
-                current_tab = np.array(tab_action_tot[i])
-                nothing.append(np.count_nonzero(current_tab == 0))
-                order_biD.append(np.count_nonzero(current_tab == 1))
-                order_asK.append(np.count_nonzero(current_tab == 2))
-            nb_of_action_agent = nothing[-1] + order_biD[-1] + order_asK[-1]
+            if not self.No_nothing:
+                nothing = []
+                order_asK = []
+                order_biD = []
+                for i in range (len(tab_action_tot)):
+                    current_tab = np.array(tab_action_tot[i])
+                    nothing.append(np.count_nonzero(current_tab == 0))
+                    order_biD.append(np.count_nonzero(current_tab == 1))
+                    order_asK.append(np.count_nonzero(current_tab == 2))
+                nb_of_action_agent = nothing[-1] + order_biD[-1] + order_asK[-1]
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(nothing)/nb_of_action_agent, mode='lines', name="Do_Nothing", opacity=0.6, line=dict(width = 1, color = 'darkblue')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_biD)/nb_of_action_agent, mode='lines', name="Order_Bid", opacity=0.6, line=dict(width = 1, color = 'darkred')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_asK)/nb_of_action_agent, mode='lines', name="Order_Ask", opacity=0.6, line=dict(width = 1, color = 'darkgreen')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=1/3*np.ones(len(np.arange(0,len(episode_rewards),1))), mode='lines', opacity=0.8, name="Theorical Values", line=dict(width = 1, color = 'black')))
+                
+                fig.update_layout(
+                    title="Evolution of the decision of the Agent",
+                    xaxis_title="Episodes",
+                    yaxis_title="Pourcent of the action taken",
+                    plot_bgcolor='#D3D3D3',
+                    paper_bgcolor='#D3D3D3',
+                    xaxis=dict(showgrid=True, gridcolor='#808080'),
+                    yaxis=dict(showgrid=True, gridcolor='#808080')
+                )
+                fig.show()
             
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(nothing)/nb_of_action_agent, mode='lines', name="Do_Nothing", opacity=0.6, line=dict(width = 1, color = 'darkblue')))
-            fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_biD)/nb_of_action_agent, mode='lines', name="Order_Bid", opacity=0.6, line=dict(width = 1, color = 'darkred')))
-            fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_asK)/nb_of_action_agent, mode='lines', name="Order_Ask", opacity=0.6, line=dict(width = 1, color = 'darkgreen')))
-            fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=1/3*np.ones(len(np.arange(0,len(episode_rewards),1))), mode='lines', opacity=0.8, name="Theorical Values", line=dict(width = 1, color = 'black')))
-            
-            fig.update_layout(
-                title="Evolution of the decision of the Agent",
-                xaxis_title="Episodes",
-                yaxis_title="Pourcent of the action taken",
-                plot_bgcolor='#D3D3D3',
-                paper_bgcolor='#D3D3D3',
-                xaxis=dict(showgrid=True, gridcolor='#808080'),
-                yaxis=dict(showgrid=True, gridcolor='#808080')
-            )
-            fig.show()
+            else:
+                order_asK = []
+                order_biD = []
+                for i in range (len(tab_action_tot)):
+                    current_tab = np.array(tab_action_tot[i])
+                    order_biD.append(np.count_nonzero(current_tab == 0))
+                    order_asK.append(np.count_nonzero(current_tab == 1))
+                nb_of_action_agent = order_biD[-1] + order_asK[-1]
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_biD)/nb_of_action_agent, mode='lines', name="Order_Bid", opacity=0.6, line=dict(width = 1, color = 'darkred')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_asK)/nb_of_action_agent, mode='lines', name="Order_Ask", opacity=0.6, line=dict(width = 1, color = 'darkgreen')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=1/3*np.ones(len(np.arange(0,len(episode_rewards),1))), mode='lines', opacity=0.8, name="Theorical Values", line=dict(width = 1, color = 'black')))
+                
+                fig.update_layout(
+                    title="Evolution of the decision of the Agent",
+                    xaxis_title="Episodes",
+                    yaxis_title="Pourcent of the action taken",
+                    plot_bgcolor='#D3D3D3',
+                    paper_bgcolor='#D3D3D3',
+                    xaxis=dict(showgrid=True, gridcolor='#808080'),
+                    yaxis=dict(showgrid=True, gridcolor='#808080')
+                )
+                fig.show()
             
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=np.arange(0,len(losses),1), y=losses, mode='lines', line=dict(width = 1, color = 'darkblue')))
@@ -242,7 +271,9 @@ class Deep_Q_Learning_Agent:
             
             
             print("Actions taken of the last episode by the agent:")
-            print(f"         Do Nothing ---> {np.array(nothing)[-1]/nb_of_action_agent}%")
+            if not self.No_nothing:
+                print(f"         Do Nothing ---> {np.array(nothing)[-1]/nb_of_action_agent}%")
+            
             print(f"          Order Bid ---> {np.array(order_biD)[-1]/nb_of_action_agent}%")
             print(f"          Order Ask ---> {np.array(order_asK)[-1]/nb_of_action_agent}%\n")
             print('________________________________________________________________')
@@ -266,29 +297,41 @@ class Deep_Q_Learning_Agent:
         # self.q_network.load_state_dict(torch.load('model.pth'))
         while not done:
             action = self.select_action(state, 0)
-            next_state, reward, done, _, simulated_step = self.env.step_trained(action, frequency_action, nb_event)
+            next_state, reward, done, _, simulated_step = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
             state = next_state
             total_reward += reward
             price_evolution.append(simulated_step[4])
             price_evolution_time.append(next_state[1])
             pnl_balance.append(total_reward)
             pnl_time.append(next_state[1])
-            if action != 0:
+            if not self.No_nothing:
+                if action != 0:
+                    price_evolution.append(next_state[0])
+                    price_evolution_time.append(next_state[1])
+                if action == 0:
+                    agent_action_nothing.append(next_state[0])
+                    agent_action_nothing_time.append(next_state[1])
+                if action == 1:
+                    agent_action_sell.append(next_state[0])
+                    agent_action_sell_time.append(next_state[1])
+                if action == 2:
+                    agent_action_buy.append(next_state[0])
+                    agent_action_buy_time.append(next_state[1])
+            else:
                 price_evolution.append(next_state[0])
                 price_evolution_time.append(next_state[1])
-            if action == 0:
-                agent_action_nothing.append(next_state[0])
-                agent_action_nothing_time.append(next_state[1])
-            if action == 1:
-                agent_action_sell.append(next_state[0])
-                agent_action_sell_time.append(next_state[1])
-            if action == 2:
-                agent_action_buy.append(next_state[0])
-                agent_action_buy_time.append(next_state[1])
+                if action == 0:
+                    agent_action_sell.append(next_state[0])
+                    agent_action_sell_time.append(next_state[1])
+                if action == 1:
+                    agent_action_buy.append(next_state[0])
+                    agent_action_buy_time.append(next_state[1])
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
+        print(self.average_pnl_random)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
-        fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
+        if not self.No_nothing:
+            fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
         fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Buy',mode='markers'))
         fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Sell',mode='markers'))
         fig.update_layout(
@@ -302,8 +345,8 @@ class Deep_Q_Learning_Agent:
             )
         fig.show()
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=pnl_time, y=pnl_balance, name = 'P&L',mode='lines', line=dict(width = 1, color = 'darkred')))
-        fig.add_trace(go.Scatter(x=pnl_time, y = self.average_pnl_random*np.array(pnl_time)/self.nb_of_action, name = 'Average P&L with a Random Strategy',mode='lines', line=dict(width = 1, color = 'black')))
+        fig.add_trace(go.Scatter(x=pnl_time, y=pnl_balance, name = 'P&L',mode='lines', line=dict(width = 2, color = 'darkred')))
+        fig.add_trace(go.Scatter(x=pnl_time, y = self.average_pnl_random*np.array(pnl_time)/self.average_time, name = 'Average P&L with a Random Strategy',mode='lines', line=dict(width = 2, color = 'black')))
         fig.update_layout(
                 title=f"P&L Evolution (Trained with trajectories of {self.nb_of_action} events)",
                 xaxis_title="Time",
@@ -324,18 +367,18 @@ class Deep_Q_Learning_Agent:
             total_reward = 0.0
             while not done:
                 random_action = random.randrange(self.action_dim)
-                state, reward, done, _ = self.env.step(random_action, frequency_action)
+                state, reward, done, _ = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
                 total_reward += reward
                 random_final_rewards.append(total_reward)
         avg_random_price = np.mean(random_final_rewards)
         return avg_random_price
 
-def compare_networks(tab_network, nb_episode = 1000, window_size = 20, frequency_action = 2):
+def compare_networks(tab_network, nb_episode = 1000, window_size = 20, frequency_action = 2, No_nothing = False):
     res = []
     for i in range (len(tab_network)):
-        agent = Deep_Q_Learning_Agent(tab_network[i])
+        agent = Deep_Q_Learning_Agent(tab_network[i], No_nothing = No_nothing)
         res.append(agent.train(visu = False, frequency_action = frequency_action, visu_graph=False, nb_episode = nb_episode, window_size = window_size, comparaison = True))
-    agent = Deep_Q_Learning_Agent(tab_network[0])
+    agent = Deep_Q_Learning_Agent(tab_network[0], No_nothing = No_nothing)
     res.append(agent.random_action(frequency_action = frequency_action))
     tab_network.append('Random Strategy')
     fig = go.Figure()
