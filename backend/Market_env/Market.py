@@ -39,7 +39,7 @@ class MarketEnv:
         ], dtype=np.float32)
         return state
     
-    def step(self, action):
+    def step(self, action, frequency_action):
         """
         Pour une étape :
         - Sauvegarde de la valeur nette de l'agent
@@ -51,7 +51,7 @@ class MarketEnv:
         _ = self.simulation.step()
         self.current_step += 1
 
-        if self.current_step % 2 == 0:
+        if self.current_step % frequency_action == 0:
             self.current_step += 1
             action_map = {0: "do_nothing", 1: "order_bid", 2:"order_ask"}
             action_name = action_map.get(action)

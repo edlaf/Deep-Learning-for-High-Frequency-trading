@@ -50,7 +50,7 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-def train(visu=True, nb_episode = 1000, window_size = 10):
+def train(visu=True, nb_episode = 1000, window_size = 10, frequency_action = 2):
     intensity_cancel,intensity_order,intensity_add, price_0, tick, theta, nb_of_action, liquidy_last_lim, size_max, lambda_event, event_prob, initial_ask, initial_bid = param.params_qr()
     
     simulation = qr_agent.QrWithAgent(intensity_cancel, intensity_order, intensity_add,
@@ -84,15 +84,17 @@ def train(visu=True, nb_episode = 1000, window_size = 10):
     
     episode_rewards = []
     print("--- Q-DEEP-REINFORCED AGENT ---\n")
-    print("TRAINING...")
-    for episode in tqdm(range(num_episodes)):
+    print("---> TRAINING...\n")
+    tab_action_tot = []
+    pbar = tqdm(range(num_episodes), desc="Entraînement")
+    for episode in pbar:
         state = env.reset()
         total_reward = 0.0
         done = False
         tab_action = []
         while not done:
             action = select_action(state, epsilon)
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, _ = env.step(action, frequency_action)
             replay_buffer.push(state, action, reward, next_state, done)
             state = next_state
             total_reward += reward
@@ -114,13 +116,14 @@ def train(visu=True, nb_episode = 1000, window_size = 10):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-        
+        pbar.set_postfix(total_reward=f"{total_reward:.2f}")
         epsilon = max(epsilon_min, epsilon * epsilon_decay)
         episode_rewards.append(total_reward)
+        tab_action_tot.append(tab_action)
         # print(f"Episode {episode+1}/{num_episodes} - Total Reward: {total_reward:.2f} - Epsilon: {epsilon:.2f}")
         if (episode+1) % target_update == 0:
             target_network.load_state_dict(q_network.state_dict())
-    print("---TRAINING FINISHED---\n")
+    print("\n---TRAINING FINISHED---\n")
     if visu:
         random_final_rewards = []
         
@@ -130,11 +133,11 @@ def train(visu=True, nb_episode = 1000, window_size = 10):
             total_reward = 0.0
             while not done:
                 random_action = random.randrange(action_dim)
-                state, reward, done, _ = env.step(random_action)
+                state, reward, done, _ = env.step(random_action, frequency_action)
                 total_reward += reward
             random_final_rewards.append(total_reward)
         avg_random_price = np.mean(random_final_rewards)
-        print("--- VISUALISING REWARD EVOLUTION ---\n")
+        print("--- VISUALISING REWARD AND DECISION EVOLUTION ---\n")
         
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=episode_rewards, mode='lines', name="Agent", line=dict(width = 2, color = 'darkblue')))
@@ -170,8 +173,42 @@ def train(visu=True, nb_episode = 1000, window_size = 10):
             yaxis=dict(showgrid=True, gridcolor='#808080')
         )
         fig.show()
+        
+        nothing = []
+        order_asK = []
+        order_biD = []
+        for i in range (len(tab_action_tot)):
+            current_tab = np.array(tab_action_tot[i])
+            nothing.append(np.count_nonzero(current_tab == 0))
+            order_biD.append(np.count_nonzero(current_tab == 1))
+            order_asK.append(np.count_nonzero(current_tab == 2))
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(nothing)/nb_of_action, mode='lines', name="Do_Nothing", line=dict(width = 2, color = 'darkblue')))
+        fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_biD)/nb_of_action, mode='lines', name="Order_Bid", line=dict(width = 2, color = 'darkred')))
+        fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_asK)/nb_of_action, mode='lines', name="Order_Ask", line=dict(width = 2, color = 'darkgreen')))
+
+        fig.update_layout(
+            title="Evolution of the decision of the Agent",
+            xaxis_title="Episodes",
+            yaxis_title="P&L",
+            plot_bgcolor='#D3D3D3',
+            paper_bgcolor='#D3D3D3',
+            xaxis=dict(showgrid=True, gridcolor='#808080'),
+            yaxis=dict(showgrid=True, gridcolor='#808080')
+        )
+        fig.show()
+        
+        
         print("\n--- STATS ---\n")
-        print("Average Reward for the Random Strat :", avg_random_price)
-        tab_action = np.array(tab_action)
-        print("Mean of the actions taken of the last episode by the agent", np.mean(tab_action),"\n")
+        print(f"Action taken by the agent every {frequency_action}")
+        print("Average Reward for the Random Strategy :", avg_random_price)
+        
+        nb_of_action_agent = nothing[-1] + order_biD[-1] + order_asK[-1]
+        
+        print("Actions taken of the last episode by the agent:")
+        print(f"         Do Nothing ---> {np.array(nothing)[-1]/nb_of_action_agent}%")
+        print(f"          Order Bid ---> {np.array(order_biD)[-1]/nb_of_action_agent}%")
+        print(f"          Order Ask ---> {np.array(order_asK)[-1]/nb_of_action_agent}%\n")
         print('________________________________________________________________')
+        
+        
