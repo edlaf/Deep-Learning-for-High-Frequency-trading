@@ -52,9 +52,9 @@ class One_step:
         action_order = ['A','B']
         for i in range (len(self.intensities_order)):
             if action_order[i] == 'A' and ask[0] < next_size_order:
-                times_order.append(np.infty)
+                times_order.append(np.inf)
             elif action_order[i] == 'B' and bid[0] < next_size_order:
-                times_order.append(np.infty)
+                times_order.append(np.inf)
             else:
                 times_order.append(np.random.exponential(self.intensities_order[i](state)))
         
@@ -79,9 +79,9 @@ class One_step:
         
         for i in range (len(self.intensities_cancel)):
             if action_cancel[i] == 'A' and ask[i] < next_size_cancel:
-                times_cancel.append(np.infty)
+                times_cancel.append(np.inf)
             elif action_cancel[i] == 'B' and bid[i-self.n_limit] < next_size_cancel:
-                times_cancel.append(np.infty)
+                times_cancel.append(np.inf)
             else:
                 times_cancel.append(np.random.exponential(self.intensities_cancel[i](state)))
         

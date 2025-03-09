@@ -240,24 +240,23 @@ class Deep_Q_Learning_Agent:
             
             
     def test(self, nb_event, frequency_action = 2):
-        print(f"\n--- TRAINING THE AGENT OVER {nb_event} EPISODES ---")
-        pbar = tqdm(range(nb_event), desc="           Testing")
+        print(f"\n--- TESTING THE AGENT OVER A SIMULTION OF {nb_event} ---\n")
+        pbar = tqdm(range(nb_event), desc="---> Testing")
         state = self.env.reset()
         total_reward = 0.0
         done = False
         tab_action = []
         while not done:
             action = self.select_action(state, self.epsilon)
-            next_state, reward, done, _, simulated_step = self.env.step(action, frequency_action)
+            next_state, reward, done, _, simulated_step = self.env.step_trained(action, frequency_action)
             state = next_state
             total_reward += reward
             tab_action.append(action)
-
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
+            
             
     def random_action(self, frequency_action = 2):
         random_final_rewards = []
-            
         for _ in range(1000):
             state = self.env.reset()
             done = False
