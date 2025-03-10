@@ -54,10 +54,11 @@ class MarketEnv:
         else:
             action_name = "do_nothing"
         new_net = self.agent.cash + self.agent.position * self.simulation.price
-        reward = new_net - prev_net
+        reward = new_net - prev_net - (self.agent.position**2) * 1
+        pnl = new_net - prev_net
         state = self.get_state()
         done = self.current_step >= self.nb_steps
-        return state, reward, done, {}
+        return state, reward, done, {}, pnl
 
     def step_trained(self, action, frequency_action, nb_events, No_nothing = False):
         prev_net = self.agent.cash + self.agent.position * self.simulation.price
@@ -74,7 +75,8 @@ class MarketEnv:
         else:
             action_name = "do_nothing"
         new_net = self.agent.cash + self.agent.position * self.simulation.price
-        reward = new_net - prev_net
+        reward = new_net - prev_net - (self.agent.position**2) * 1 
+        pnl = new_net - prev_net
         state = self.get_state()
         done = self.current_step >= nb_events
-        return state, reward, done, {}, simulated_step
+        return state, reward, done, {}, simulated_step, pnl

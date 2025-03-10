@@ -257,10 +257,10 @@ class Deep_Q_Learning_Agent:
             tab_action = []
             while not done:
                 action = self.select_action(state, self.epsilon)
-                next_state, reward, done, _ = self.env.step(action, frequency_action, No_nothing = self.No_nothing)
+                next_state, reward, done, _, pnl = self.env.step(action, frequency_action, No_nothing = self.No_nothing)
                 self.replay_buffer.push(state, action, reward, next_state, done)
                 state = next_state
-                total_reward += reward
+                total_reward += pnl
                 tab_action.append(action)
                 if len(self.replay_buffer) >= self.batch_size:
                     states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)
@@ -296,8 +296,8 @@ class Deep_Q_Learning_Agent:
             total_reward = 0.0
             while not done:
                 random_action = random.randrange(self.action_dim)
-                state, reward, done, _ = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
-                total_reward += reward
+                state, reward, done, _, pnl = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
+                total_reward += pnl
             random_final_rewards.append(total_reward)
             self.average_time += state[1]/nb_sim
         avg_random_price = np.mean(random_final_rewards)
@@ -443,9 +443,9 @@ class Deep_Q_Learning_Agent:
         # self.q_network.load_state_dict(torch.load('model.pth'))
         while not done:
             action = self.select_action(state, 0)
-            next_state, reward, done, _, simulated_step = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
+            next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
             state = next_state
-            total_reward += reward
+            total_reward += pnl
             price_evolution.append(simulated_step[4])
             price_evolution_time.append(next_state[1])
             pnl_balance.append(total_reward)
@@ -511,8 +511,8 @@ class Deep_Q_Learning_Agent:
             total_reward = 0.0
             while not done:
                 random_action = random.randrange(self.action_dim)
-                state, reward, done, _ = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
-                total_reward += reward
+                state, reward, done, _, pnl = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
+                total_reward += pnl
                 random_final_rewards.append(total_reward)
         avg_random_price = np.mean(random_final_rewards)
         return avg_random_price
