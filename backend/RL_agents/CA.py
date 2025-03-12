@@ -124,7 +124,7 @@ class ActorCriticAgent:
         episode_actions = []  # Pour enregistrer les actions par épisode
 
         # Calcul de la performance de la stratégie aléatoire pour comparaison
-        avg_random_price = self.random_action()
+        avg_random_price = self.random_action(nb_episode=nb_episode)
 
         if visu:
             print("                                                            --- ACTOR-CRITIC AGENT ---\n")
@@ -187,6 +187,7 @@ class ActorCriticAgent:
             total_losses.append(loss.item())
             
             pbar.set_postfix({"Total Reward": f"{total_reward:.2f}"})
+        pbar.close()
         
         # ----------------------- Visualisations avec Plotly -----------------------
         if comparaison:
@@ -410,9 +411,9 @@ class ActorCriticAgent:
         agent_action_sell = []
         price_evolution_time = []
         
-        pbar = tqdm(total=nb_event, desc="Testing")
+        #pbar_2 = tqdm(total=nb_event, desc="Testing")
         while not done:
-            action = self.select_action(state, 0)
+            action = self.select_action(state)
             next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
             state = next_state
             total_reward += pnl
@@ -444,8 +445,13 @@ class ActorCriticAgent:
             pnl_balance.append(total_reward)
             pnl_time.append(next_state[1])
 
-            pbar.set_postfix(total_reward=f"{total_reward:.2f}")
-        
+            #pbar.set_postfix(total_reward=f"{total_reward:.2f}")
+        #pbar.close()
+        # Si la performance aléatoire n'a pas encore été calculée, on le fait ici
+        if self.average_pnl_random is None:
+            self.average_pnl_random = self.random_action(nb_episode=nb_event)
+        if self.average_time is None:
+            self.average_time = time_evolution[-1] if time_evolution else 1
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
@@ -477,12 +483,13 @@ class ActorCriticAgent:
         fig.show()
         
     
-    def random_action(self, frequency_action=2):
+    def random_action(self, frequency_action=2, nb_episode=1000):
         """
         Exécute une stratégie aléatoire sur 1000 épisodes et retourne le reward moyen.
         """
         random_final_rewards = []
-        for _ in range(1000):
+        pbar = tqdm(range(nb_episode), desc="Random Agent")
+        for _ in pbar:
             state = self.env.reset()
             done = False
             total_reward = 0.0
