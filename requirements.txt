@@ -4,3 +4,4 @@ plotly
 pandas
 matplotlib
 tqdm
+nbformat
