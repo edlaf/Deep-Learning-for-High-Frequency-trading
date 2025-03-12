@@ -98,9 +98,10 @@ class ActorCriticAgent:
     def select_action(self, state):
         """
         Pour un état donné, renvoie :
-         - l'action échantillonnée depuis la distribution de l'actor,
-         - le log-probabilité de cette action (pour le calcul de la loss),
-         - et la valeur estimée par le critic.
+        - l'action échantillonnée depuis la distribution de l'actor,
+        - le log-probabilité de cette action (pour le calcul de la loss),
+        - la valeur estimée par le critic,
+        - et l'entropie de la distribution (pour encourager l'exploration).
         """
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         probs = self.actor(state_tensor)
@@ -108,23 +109,26 @@ class ActorCriticAgent:
         action = dist.sample()
         log_prob = dist.log_prob(action)
         value = self.critic(state_tensor)
-        return action.item(), log_prob, value
+        entropy = dist.entropy()
+        return action.item(), log_prob, value, entropy
 
-    def train(self, nb_episode=1000, frequency_action=1, window_size=10, visu=True, visu_graph=True, comparaison=False):
+
+    def train(self, nb_episode=1000, frequency_action=1, window_size=10, visu=True, visu_graph=True, comparaison=False, entropy_coef=0.01, max_grad_norm=0.5):
         """
         Entraîne l'agent sur nb_episode épisodes.
-          - frequency_action est passé à l'environnement via env.step.
-          - window_size est utilisé pour le calcul d'une moyenne glissante des récompenses.
-          - Des visualisations interactives avec Plotly sont affichées à la fin de l'entraînement.
+        Améliorations :
+        - Normalisation des avantages
+        - Bonus d'entropie dans la loss de l'acteur
+        - Clipping des gradients
         """
         episode_rewards = []
         all_actor_losses = []
         all_critic_losses = []
         total_losses = []  # pour la visualisation de la loss totale
-        episode_actions = []  # Pour enregistrer les actions par épisode
+        episode_actions = []  # pour enregistrer les actions par épisode
 
         # Calcul de la performance de la stratégie aléatoire pour comparaison
-        avg_random_price = self.random_action(nb_episode=nb_episode)
+        self.average_pnl_random, self.average_time = self.random_action(nb_episode=nb_episode)
 
         if visu:
             print("                                                            --- ACTOR-CRITIC AGENT ---\n")
@@ -138,16 +142,19 @@ class ActorCriticAgent:
             log_probs = []
             values = []
             rewards = []
-            actions = []  # actions effectuées durant cet épisode
+            entropies = []  # pour stocker l'entropie de la distribution d'action
+            actions = []    # actions effectuées durant cet épisode
             
             # Interaction avec l'environnement pendant l'épisode
             while not done:
-                action, log_prob, value = self.select_action(state)
+                # ATTENTION : modifiez votre méthode select_action pour qu'elle retourne aussi l'entropie.
+                action, log_prob, value, entropy = self.select_action(state)
                 actions.append(action)
                 next_state, reward, done, _, pnl = self.env.step(action, frequency_action=frequency_action, No_nothing=self.No_nothing)
                 log_probs.append(log_prob)
                 values.append(value)
-                rewards.append(reward)
+                rewards.append(pnl)
+                entropies.append(entropy)
                 state = next_state
             
             # Stockage des actions de l'épisode
@@ -164,19 +171,23 @@ class ActorCriticAgent:
             # Conversion des listes en tenseurs
             values_tensor = torch.cat(values)
             log_probs_tensor = torch.stack(log_probs)
+            entropies_tensor = torch.stack(entropies)
             
-            # Calcul de l'avantage (returns - valeur estimée)
+            # Calcul de l'avantage et normalisation
             advantages = returns - values_tensor.squeeze()
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
             
-            # Calcul des pertes Actor et Critic
-            actor_loss = - (log_probs_tensor * advantages.detach()).sum()
+            # Calcul des pertes Actor et Critic avec bonus d'entropie
+            actor_loss = - (log_probs_tensor * advantages.detach()).sum() - entropy_coef * entropies_tensor.sum()
             critic_loss = F.mse_loss(values_tensor.squeeze(), returns)
             loss = actor_loss + critic_loss
             
-            # Mise à jour des réseaux
+            # Mise à jour des réseaux avec clipping des gradients
             self.optimizer_actor.zero_grad()
             self.optimizer_critic.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_grad_norm)
             self.optimizer_actor.step()
             self.optimizer_critic.step()
             
@@ -208,7 +219,7 @@ class ActorCriticAgent:
             ))
             fig.add_trace(go.Scatter(
                 x=np.arange(len(episode_rewards)),
-                y=np.ones(len(episode_rewards)) * avg_random_price,
+                y=np.ones(len(episode_rewards)) * self.average_pnl_random,
                 mode='lines+markers',
                 name="Random Strategy",
                 line=dict(width=1, color='darkred')
@@ -236,7 +247,7 @@ class ActorCriticAgent:
             ))
             fig.add_trace(go.Scatter(
                 x=np.arange(len(episode_rewards)),
-                y=np.ones(len(episode_rewards)) * avg_random_price,
+                y=np.ones(len(episode_rewards)) * self.average_pnl_random,
                 mode='lines',
                 name="Random Strategy",
                 line=dict(width=1, color='darkred')
@@ -376,7 +387,7 @@ class ActorCriticAgent:
             # Affichage des statistiques en console
             print("\n--- STATS ---\n")
             print(f"Action taken by the agent every {frequency_action}")
-            print("Average Reward for the Random Strategy :", avg_random_price)
+            print("Average Reward for the Random Strategy :", self.average_pnl_random)
             if not self.No_nothing:
                 print("Actions taken of the last episode by the agent:")
                 print(f"         Do Nothing ---> {np.array(nothing)[-1] / nb_of_action_agent:.2%}")
@@ -385,6 +396,7 @@ class ActorCriticAgent:
             print('________________________________________________________________')
         
         return episode_rewards
+
 
     def test(self, nb_event, frequency_action=1):
         """
@@ -413,7 +425,7 @@ class ActorCriticAgent:
         
         #pbar_2 = tqdm(total=nb_event, desc="Testing")
         while not done:
-            action = self.select_action(state)
+            action = self.select_action(state)[0]
             next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
             state = next_state
             total_reward += pnl
@@ -448,10 +460,8 @@ class ActorCriticAgent:
             #pbar.set_postfix(total_reward=f"{total_reward:.2f}")
         #pbar.close()
         # Si la performance aléatoire n'a pas encore été calculée, on le fait ici
-        if self.average_pnl_random is None:
-            self.average_pnl_random = self.random_action(nb_episode=nb_event)
-        if self.average_time is None:
-            self.average_time = time_evolution[-1] if time_evolution else 1
+        if self.average_pnl_random is None or self.average_time is None:
+            self.average_pnl_random, self.average_time = self.random_action(nb_episode=nb_event)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
@@ -489,6 +499,7 @@ class ActorCriticAgent:
         """
         random_final_rewards = []
         pbar = tqdm(range(nb_episode), desc="Random Agent")
+        cumulated_time = 0.0
         for _ in pbar:
             state = self.env.reset()
             done = False
@@ -497,6 +508,7 @@ class ActorCriticAgent:
                 random_act = random.randrange(self.action_dim)
                 state, reward, done, _, pnl = self.env.step(random_act, frequency_action, No_nothing=self.No_nothing)
                 total_reward += pnl
+                cumulated_time += state[1]
             random_final_rewards.append(total_reward)
         avg_random_price = np.mean(random_final_rewards)
-        return avg_random_price
+        return avg_random_price, np.mean(cumulated_time)
