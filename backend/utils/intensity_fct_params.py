@@ -46,7 +46,7 @@ def params_qr():
     price_0 = 100.0
     tick = 1
     theta = 0.8
-    nb_of_action = 100
+    nb_of_action = 1000
     liquidy_last_lim = 50
     size_max = [5, 4, 8]
     lambda_event = [10 for i in range(34)] + [100 for i in range(15)] + [1000]

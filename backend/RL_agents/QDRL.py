@@ -245,7 +245,7 @@ class Deep_Q_Learning_Agent:
         episode_rewards = []
         if visu:
             print("                                                            --- Q-DEEP-REINFORCED AGENT ---\n")
-            print(f"\n--- TRAINING THE AGENT OVER {nb_episode} EPISODES ---")
+            print(f"\n--- TRAINING THE AGENT OVER {nb_episode} EPISODES OF LENGTH {self.nb_of_action} WITH A FREQUENCY OF {frequency_action} ({int(nb_episode*self.nb_of_action/frequency_action)} training data) ---")
             print("\n     ---> TRAINING...\n")
         tab_action_tot = []
         pbar = tqdm(range(num_episodes), desc=f"           Training ({self.arch} Network)")
@@ -279,6 +279,8 @@ class Deep_Q_Learning_Agent:
                     self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
+            if len(self.replay_buffer) < self.batch_size:
+                raise UnboundLocalError(f"Frequency {frequency_action} with {self.nb_of_action} for {nb_episode} and thus batch size = {self.batch_size} > replay buffer = {len(self.replay_buffer)}. THERE IS NO TRAINING!!!")
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
             episode_rewards.append(total_reward)
@@ -446,8 +448,9 @@ class Deep_Q_Learning_Agent:
             next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
             state = next_state
             total_reward += pnl
-            price_evolution.append(simulated_step[4])
-            price_evolution_time.append(next_state[1])
+            for j in range (len(simulated_step)):
+                price_evolution.append(simulated_step[j][4])
+                price_evolution_time.append(simulated_step[j][0])
             pnl_balance.append(total_reward)
             pnl_time.append(next_state[1])
             if not self.No_nothing:
