@@ -448,11 +448,6 @@ class Deep_Q_Learning_Agent:
             next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
             state = next_state
             total_reward += pnl
-            for j in range (len(simulated_step)):
-                price_evolution.append(simulated_step[j][4])
-                price_evolution_time.append(simulated_step[j][0])
-            pnl_balance.append(total_reward)
-            pnl_time.append(next_state[1])
             if not self.No_nothing:
                 if action != 0:
                     price_evolution.append(next_state[0])
@@ -475,13 +470,19 @@ class Deep_Q_Learning_Agent:
                 if action == 1:
                     agent_action_buy.append(next_state[0])
                     agent_action_buy_time.append(next_state[1])
+            for j in range (len(simulated_step)):
+                price_evolution.append(simulated_step[j][4])
+                price_evolution_time.append(simulated_step[j][0])
+            pnl_balance.append(total_reward)
+            pnl_time.append(next_state[1])
+
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
             fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Buy',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Sell',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Sell',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Buy',mode='markers'))
         fig.update_layout(
                 title="Price Evolution with the Agent Interaction",
                 xaxis_title="Time",
