@@ -17,7 +17,7 @@ class MarketEnv:
         self.current_step = 0
     
     def reset(self):
-        self.simulation.intiate_market(self.initial_ask, self.initial_bid)
+        self.simulation.initiate_market(self.initial_ask, self.initial_bid)
         self.agent.position = 0
         self.agent.order_active = None
         self.agent.cash = 0
@@ -40,7 +40,7 @@ class MarketEnv:
         return state
     
     def step(self, action, frequency_action, No_nothing = False):
-        prev_net = self.agent.cash + (self.agent.position * self.simulation.price) * (self.agent.position > 0)
+        prev_net = self.agent.cash + (self.agent.position * self.simulation.price)
         action_map = {0: "do_nothing", 1: "order_bid", 2:"order_ask"}
         if No_nothing:
             action_map = {0: "order_bid", 1:"order_ask"}
@@ -49,7 +49,7 @@ class MarketEnv:
         for _ in range (frequency_action-1):
             _ = self.simulation.step()
             self.current_step += 1
-        new_net = self.agent.cash + (self.agent.position * self.simulation.price) * (self.agent.position > 0)
+        new_net = self.agent.cash + (self.agent.position * self.simulation.price)
         reward = self.reward(action, frequency_action, prev_net, new_net)
         pnl = new_net - prev_net
         state = self.get_state()
@@ -59,7 +59,7 @@ class MarketEnv:
         return state, reward, done, {}, pnl
 
     def step_trained(self, action, frequency_action, nb_events, No_nothing = False):
-        prev_net = self.agent.cash + (self.agent.position * self.simulation.price) * (self.agent.position > 0)
+        prev_net = self.agent.cash + (self.agent.position * self.simulation.price)
         simulated_step = []
         action_map = {0: "do_nothing", 1: "order_bid", 2:"order_ask"}
         if No_nothing:
@@ -69,7 +69,7 @@ class MarketEnv:
         for _ in range (frequency_action-1):
             simulated_step.append(self.simulation.step())
             self.current_step += 1
-        new_net = self.agent.cash + (self.agent.position * self.simulation.price) * (self.agent.position > 0)
+        new_net = self.agent.cash + (self.agent.position * self.simulation.price)
         reward = self.reward(action, frequency_action, prev_net, new_net)
         pnl = new_net - prev_net
         state = self.get_state()

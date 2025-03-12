@@ -78,7 +78,7 @@ class QrWithAgent(qr.Qr):
             agent.order_active_ask = None
 
     def run_market_with_agent(self, initial_ask, initial_bid, agent):
-        self.intiate_market(initial_ask, initial_bid)
+        self.initiate_market(initial_ask, initial_bid)
         for i in range(self.nb_of_action):
             market_step = self.step()
             market_state = {

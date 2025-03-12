@@ -159,7 +159,7 @@ class Qr:
         self.price_0         = price_0
         
         
-    def intiate_market(self, initial_ask, initial_bid):
+    def initiate_market(self, initial_ask, initial_bid):
         '''
         Create the first state of the market using initial_ask ==> [size at limit 1 of ask, size at limit 2 of ask, ... size at limit 1 of ask] and initial_bid
         '''
@@ -396,7 +396,7 @@ class Qr:
         '''
         Create an entire market simulation
         '''
-        self.intiate_market(initial_ask, initial_bid)
+        self.initiate_market(initial_ask, initial_bid)
         for i in range (self.nb_of_action):
             self.df_evolution.loc[len(self.df_evolution)] = self.step()
         return self.df_evolution
@@ -432,7 +432,7 @@ class Qr:
         fig.show()
     
     def run_and_trade_market(self, initial_ask, initial_bid):
-        self.intiate_market(initial_ask, initial_bid)
+        self.initiate_market(initial_ask, initial_bid)
         
 def Run_QR_simulated(nb_action, price_only = True):
     

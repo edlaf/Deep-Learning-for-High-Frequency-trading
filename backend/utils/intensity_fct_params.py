@@ -52,8 +52,8 @@ def params_qr():
     lambda_event = [10 for i in range(34)] + [100 for i in range(15)] + [1000]
     event_prob = 1/200
     
-    initial_ask = [10, 20, 30]
-    initial_bid = [10, 20, 30]
+    initial_ask = [100, 200, 300]
+    initial_bid = [100, 200, 300]
     return intensity_cancel,intensity_order,intensity_add, price_0, tick, theta, nb_of_action, liquidy_last_lim, size_max, lambda_event, event_prob, initial_ask, initial_bid
 
 def params_QDRL(No_nothing = False):

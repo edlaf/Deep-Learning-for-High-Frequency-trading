@@ -481,8 +481,8 @@ class Deep_Q_Learning_Agent:
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
             fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Sell',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Buy',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Buy',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Sell',mode='markers'))
         fig.update_layout(
                 title="Price Evolution with the Agent Interaction",
                 xaxis_title="Time",
