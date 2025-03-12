@@ -47,7 +47,7 @@ class MarketEnv:
         action_name = action_map.get(action)
         self.simulation.execute_agent_action(action_name, self.agent)
         new_net = self.agent.cash + self.agent.position * self.simulation.price
-        reward = self.reward(action, frequency_action)
+        reward = self.reward(action, frequency_action, prev_net, new_net)
         pnl = new_net - prev_net
         state = self.get_state()
         done = self.current_step >= self.nb_steps
@@ -66,7 +66,7 @@ class MarketEnv:
         action_name = action_map.get(action)
         self.simulation.execute_agent_action(action_name, self.agent)
         new_net = self.agent.cash + self.agent.position * self.simulation.price
-        reward = self.reward(action, frequency_action)
+        reward = self.reward(action, frequency_action, prev_net, new_net)
         pnl = new_net - prev_net
         state = self.get_state()
         done = self.current_step >= nb_events
@@ -76,8 +76,6 @@ class MarketEnv:
             self.current_step += 1
         return state, reward, done, {}, simulated_step, pnl
 
-    def reward(self, action, frequency_action):
-        prev_net = self.agent.cash + self.agent.position * self.simulation.price
-        new_net = self.agent.cash + self.agent.position * self.simulation.price
+    def reward(self, action, frequency_action, prev_net, new_net):
         reward = new_net - prev_net #- ((self.agent.position-3)**2) * 1
         return reward
