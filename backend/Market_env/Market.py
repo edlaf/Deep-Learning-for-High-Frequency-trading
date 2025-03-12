@@ -46,10 +46,12 @@ class MarketEnv:
             action_map = {0: "order_bid", 1:"order_ask"}
         action_name = action_map.get(action)
         self.simulation.execute_agent_action(action_name, self.agent)
+
         for _ in range (frequency_action-1):
             _ = self.simulation.step()
             self.current_step += 1
         new_net = self.agent.cash + (self.agent.position * self.simulation.price)
+        
         reward = self.reward(action, frequency_action, prev_net, new_net)
         pnl = new_net - prev_net
         state = self.get_state()
@@ -66,10 +68,12 @@ class MarketEnv:
             action_map = {0: "order_bid", 1:"order_ask"}
         action_name = action_map.get(action)
         self.simulation.execute_agent_action(action_name, self.agent)
+        
         for _ in range (frequency_action-1):
             simulated_step.append(self.simulation.step())
             self.current_step += 1
         new_net = self.agent.cash + (self.agent.position * self.simulation.price)
+        
         reward = self.reward(action, frequency_action, prev_net, new_net)
         pnl = new_net - prev_net
         state = self.get_state()
