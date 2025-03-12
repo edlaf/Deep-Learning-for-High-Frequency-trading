@@ -111,6 +111,23 @@ class ActorCriticAgent:
         value = self.critic(state_tensor)
         entropy = dist.entropy()
         return action.item(), log_prob, value, entropy
+    
+    def select_action_bis(self, state):
+        """
+        Pour un état donné, renvoie :
+        - l'action échantillonnée depuis la distribution de l'actor,
+        - le log-probabilité de cette action (pour le calcul de la loss),
+        - la valeur estimée par le critic,
+        - et l'entropie de la distribution (pour encourager l'exploration).
+        """
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        probs = self.actor(state_tensor)
+        dist = torch.distributions.Categorical(probs)
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        value = self.critic(state_tensor)
+        entropy = dist.entropy()
+        return action, log_prob, value, entropy, dist
 
 
     def train(self, nb_episode=1000, frequency_action=1, window_size=10, visu=True, visu_graph=True, comparaison=False, entropy_coef=0.01, max_grad_norm=0.5):
