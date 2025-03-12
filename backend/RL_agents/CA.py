@@ -197,7 +197,7 @@ class ActorCriticAgent:
             # Calcul des pertes Actor et Critic avec bonus d'entropie
             actor_loss = - (log_probs_tensor * advantages.detach()).sum() - entropy_coef * entropies_tensor.sum()
             critic_loss = F.mse_loss(values_tensor.squeeze(), returns)
-            loss = actor_loss + critic_loss
+            loss = -(actor_loss + critic_loss)
             
             # Mise à jour des réseaux avec clipping des gradients
             self.optimizer_actor.zero_grad()
