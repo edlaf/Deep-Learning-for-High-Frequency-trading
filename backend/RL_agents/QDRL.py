@@ -168,7 +168,7 @@ class Deep_Q_Learning_Agent:
         self.simulation = qr_agent.QrWithAgent(self.intensity_cancel, self.intensity_order, self.intensity_add,
                                 self.price_0, self.tick, self.theta, self.nb_of_action, self.liquidy_last_lim,
                                 self.size_max, self.lambda_event, self.event_prob)
-        self.agent = qr_agent.TradingAgent()
+        self.agent = qr_agent.TradingAgent(self.price_0)
         
         self.nb_steps = self.nb_of_action
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
@@ -557,7 +557,7 @@ class DQN_Agent:
         self.simulation = qr_agent.QrWithAgent(self.intensity_cancel, self.intensity_order, self.intensity_add,
                                 self.price_0, self.tick, self.theta, self.nb_of_action, self.liquidy_last_lim,
                                 self.size_max, self.lambda_event, self.event_prob)
-        self.agent = qr_agent.TradingAgent()
+        self.agent = qr_agent.TradingAgent(self.price_0)
         
         self.nb_steps = self.nb_of_action
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
