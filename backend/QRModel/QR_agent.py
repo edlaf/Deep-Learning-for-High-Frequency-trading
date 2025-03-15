@@ -14,7 +14,7 @@ import backend.QRModel.QR_only as qr
 
 class TradingAgent:
     def __init__(self, transaction_cost_cancel=0, transaction_cost_market=0):
-        self.position = 0
+        self.position = 100
         self.order_active = None
         self.cash = 0.0
         self.cash_depart = 0.0
