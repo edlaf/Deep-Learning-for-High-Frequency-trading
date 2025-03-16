@@ -172,7 +172,7 @@ class Deep_Q_Learning_Agent:
         
         self.nb_steps = self.nb_of_action
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
-        self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update = param.params_QDRL(No_nothing = No_nothing)
+        self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update, self.beta = param.params_QDRL(No_nothing = No_nothing)
         
         if torch.backends.mps.is_available():
             self.device = torch.device("mps")

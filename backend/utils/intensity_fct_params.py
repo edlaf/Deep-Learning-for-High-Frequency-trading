@@ -69,4 +69,5 @@ def params_QDRL(No_nothing = False):
     batch_size = 32
     replay_capacity = 10000
     target_update = 10
-    return state_dim, action_dim, lr, gamma, epsilon, epsilon_decay, epsilon_min, batch_size, replay_capacity, target_update
+    beta = 0.01
+    return state_dim, action_dim, lr, gamma, epsilon, epsilon_decay, epsilon_min, batch_size, replay_capacity, target_update, beta

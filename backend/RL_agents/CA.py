@@ -72,7 +72,7 @@ class ActorCriticAgent:
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
         
         # Paramètres d'apprentissage (state_dim, action_dim, lr et gamma)
-        self.state_dim, self.action_dim, self.lr, self.gamma, _, _, _, _, _, _ = param.params_QDRL(No_nothing=No_nothing)
+        self.state_dim, self.action_dim, self.lr, self.gamma, _, _, _, _, _, _, self.beta = param.params_QDRL(No_nothing=No_nothing)
         
         # Choix du device (CPU / GPU / MPS)
         if torch.backends.mps.is_available():
@@ -92,8 +92,8 @@ class ActorCriticAgent:
         self.optimizer_critic = optim.Adam(self.critic.parameters(), lr=self.lr)
         
         self.No_nothing = No_nothing
-        self.average_pnl_random = None  # sera défini lors du test
-        self.average_time = None
+        self.average_pnl_random = 0  # sera défini lors du test
+        self.average_time = 0
         
     def select_action(self, state):
         """
@@ -107,10 +107,11 @@ class ActorCriticAgent:
         dist = torch.distributions.Categorical(probs)
         action = dist.sample()
         log_prob = dist.log_prob(action)
+        entropy = dist.entropy()
         value = self.critic(state_tensor)
-        return action.item(), log_prob, value
+        return action.item(), log_prob, value, entropy
 
-    def train(self, nb_episode=1000, frequency_action=1, window_size=10, visu=True, visu_graph=True, comparaison=False):
+    def train(self, nb_episode=1000, frequency_action=1, window_size=10, visu=True, visu_graph=True, comparaison=False, max_grad_norm=0.5):
         """
         Entraîne l'agent sur nb_episode épisodes.
           - frequency_action est passé à l'environnement via env.step.
@@ -118,40 +119,40 @@ class ActorCriticAgent:
           - Des visualisations interactives avec Plotly sont affichées à la fin de l'entraînement.
         """
         episode_rewards = []
-        all_actor_losses = []
-        all_critic_losses = []
-        total_losses = []  # pour la visualisation de la loss totale
-        episode_actions = []  # Pour enregistrer les actions par épisode
-
-        # Calcul de la performance de la stratégie aléatoire pour comparaison
-        avg_random_price = self.random_action(nb_episode=nb_episode)
 
         if visu:
             print("                                                            --- ACTOR-CRITIC AGENT ---\n")
             print(f"\n--- TRAINING THE AGENT OVER {nb_episode} EPISODES OF LENGTH {self.nb_of_action} WITH A FREQUENCY OF {frequency_action} ({int(nb_episode*self.nb_of_action/frequency_action)} training data) ---")
             print("\n     ---> TRAINING...\n")
         
-        pbar = tqdm(range(nb_episode), desc="Training Actor-Critic Agent")
+        tab_action_tot = []
+        critic_losses, actor_losses = [], []
+        pbar = tqdm(range(nb_episode), desc="           Training Actor-Critic Agent")
         for episode in pbar:
             state = self.env.reset()
             done = False
             log_probs = []
             values = []
+            tot_reward = 0.0
             rewards = []
-            actions = []  # actions effectuées durant cet épisode
+            entropies = []  # pour stocker l'entropie de la distribution d'action
+            actions = []    # actions effectuées durant cet épisode
             
             # Interaction avec l'environnement pendant l'épisode
             while not done:
-                action, log_prob, value = self.select_action(state)
+                # ATTENTION : modifiez votre méthode select_action pour qu'elle retourne aussi l'entropie.
+                action, log_prob, value, entropy = self.select_action(state)
                 actions.append(action)
                 next_state, reward, done, _, pnl = self.env.step(action, frequency_action=frequency_action, No_nothing=self.No_nothing)
                 log_probs.append(log_prob)
                 values.append(value)
                 rewards.append(reward)
+                tot_reward += pnl
+                entropies.append(entropy)
                 state = next_state
             
             # Stockage des actions de l'épisode
-            episode_actions.append(actions)
+            tab_action_tot.append(actions)
             
             # Calcul des retours discountés
             returns = []
@@ -164,32 +165,53 @@ class ActorCriticAgent:
             # Conversion des listes en tenseurs
             values_tensor = torch.cat(values)
             log_probs_tensor = torch.stack(log_probs)
+            entropies_tensor = torch.stack(entropies)
             
-            # Calcul de l'avantage (returns - valeur estimée)
+            # Calcul de l'avantage et normalisation
             advantages = returns - values_tensor.squeeze()
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
             
-            # Calcul des pertes Actor et Critic
-            actor_loss = - (log_probs_tensor * advantages.detach()).sum()
+            # Calcul des pertes Actor et Critic avec bonus d'entropie
+            actor_loss = - (log_probs_tensor * advantages.detach()).sum() + self.beta * entropies_tensor.sum()
             critic_loss = F.mse_loss(values_tensor.squeeze(), returns)
             loss = actor_loss + critic_loss
             
-            # Mise à jour des réseaux
+            # Mise à jour des réseaux avec clipping des gradients
             self.optimizer_actor.zero_grad()
             self.optimizer_critic.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_grad_norm)
             self.optimizer_actor.step()
             self.optimizer_critic.step()
             
             total_reward = sum(rewards)
             episode_rewards.append(total_reward)
-            all_actor_losses.append(actor_loss.item())
-            all_critic_losses.append(critic_loss.item())
-            total_losses.append(loss.item())
+            actor_losses.append(actor_loss.item())
+            critic_losses.append(critic_loss.item())
             
             pbar.set_postfix({"Total Reward": f"{total_reward:.2f}"})
         pbar.close()
         
         # ----------------------- Visualisations avec Plotly -----------------------
+        random_final_rewards = []
+        nb_sim = 1000
+        print("\n")
+        random_pbar = tqdm(range(nb_sim), desc=f"           Training (Random Agent)")
+        for _ in random_pbar:
+            state = self.env.reset()
+            done = False
+            total_reward = 0.0
+            while not done:
+                random_action = random.randrange(self.action_dim)
+                state, reward, done, _, pnl = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
+                total_reward += pnl
+            random_final_rewards.append(total_reward)
+            self.average_time += state[1]/nb_sim
+        avg_random_price = np.mean(random_final_rewards)
+        self.average_pnl_random = avg_random_price
+        random_pbar.close()
+        
         if comparaison:
             return episode_rewards
         if visu:
@@ -197,22 +219,9 @@ class ActorCriticAgent:
         if visu_graph:
             print("--- VISUALISING REWARD AND DECISION EVOLUTION ---\n")
             
-            # 1. Comparaison P&L Agent vs Random Strategy
             fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=np.arange(len(episode_rewards)),
-                y=episode_rewards,
-                mode='lines+markers',
-                name="Agent",
-                line=dict(width=1, color='darkblue')
-            ))
-            fig.add_trace(go.Scatter(
-                x=np.arange(len(episode_rewards)),
-                y=np.ones(len(episode_rewards)) * avg_random_price,
-                mode='lines+markers',
-                name="Random Strategy",
-                line=dict(width=1, color='darkred')
-            ))
+            fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=episode_rewards, mode='lines', name="Agent", line=dict(width = 1, color = 'darkblue')))
+            fig.add_trace(go.Scatter(x=np.arange(0,nb_episode,1), y=np.ones(nb_episode)*avg_random_price, mode='lines', name="Random Strategy", line=dict(width = 1, color = 'darkred')))
             fig.update_layout(
                 title="P&L Agent vs Random",
                 xaxis_title="Episodes",
@@ -224,23 +233,16 @@ class ActorCriticAgent:
             )
             fig.show()
             
-            # 2. P&L avec moyenne glissante
-            rolling_avg = np.convolve(episode_rewards, np.ones(window_size) / window_size, mode='valid')
+            window_size = window_size
+            rolling_avg = np.convolve(
+                episode_rewards,
+                np.ones(window_size) / window_size,
+                mode='valid'
+            )
+            
             fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=np.arange(window_size - 1, len(episode_rewards)),
-                y=rolling_avg,
-                mode='lines',
-                name="Agent (Rolling Average)",
-                line=dict(width=1, color='darkblue')
-            ))
-            fig.add_trace(go.Scatter(
-                x=np.arange(len(episode_rewards)),
-                y=np.ones(len(episode_rewards)) * avg_random_price,
-                mode='lines',
-                name="Random Strategy",
-                line=dict(width=1, color='darkred')
-            ))
+            fig.add_trace(go.Scatter(x=np.arange(window_size - 1, len(episode_rewards)), y=rolling_avg, mode='lines', name="Agent", line=dict(width = 1, color = 'darkblue')))
+            fig.add_trace(go.Scatter(x=np.arange(0,nb_episode,1), y=np.ones(nb_episode)*avg_random_price, mode='lines', name="Random Strategy", line=dict(width = 1, color = 'darkred')))
             fig.update_layout(
                 title="P&L Agent vs Random (Sliding Window Rolling Average)",
                 xaxis_title="Episodes",
@@ -252,100 +254,27 @@ class ActorCriticAgent:
             )
             fig.show()
             
-            # 3. Répartition des actions par épisode
             if not self.No_nothing:
                 nothing = []
-                order_bid = []
-                order_ask = []
-                for actions in episode_actions:
-                    current = np.array(actions)
-                    nothing.append(np.count_nonzero(current == 0))
-                    order_bid.append(np.count_nonzero(current == 1))
-                    order_ask.append(np.count_nonzero(current == 2))
-                nb_of_action_agent = nothing[-1] + order_bid[-1] + order_ask[-1]
+                order_asK = []
+                order_biD = []
+                for i in range (len(tab_action_tot)):
+                    current_tab = np.array(tab_action_tot[i])
+                    nothing.append(np.count_nonzero(current_tab == 0))
+                    order_biD.append(np.count_nonzero(current_tab == 1))
+                    order_asK.append(np.count_nonzero(current_tab == 2))
+                nb_of_action_agent = nothing[-1] + order_biD[-1] + order_asK[-1]
                 
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=np.arange(len(episode_rewards)),
-                    y=np.array(nothing) / nb_of_action_agent,
-                    mode='lines',
-                    name="Do Nothing",
-                    opacity=0.6,
-                    line=dict(width=1, color='darkblue')
-                ))
-                fig.add_trace(go.Scatter(
-                    x=np.arange(len(episode_rewards)),
-                    y=np.array(order_bid) / nb_of_action_agent,
-                    mode='lines',
-                    name="Order Bid",
-                    opacity=0.6,
-                    line=dict(width=1, color='darkred')
-                ))
-                fig.add_trace(go.Scatter(
-                    x=np.arange(len(episode_rewards)),
-                    y=np.array(order_ask) / nb_of_action_agent,
-                    mode='lines',
-                    name="Order Ask",
-                    opacity=0.6,
-                    line=dict(width=1, color='darkgreen')
-                ))
-                fig.add_trace(go.Scatter(
-                    x=np.arange(len(episode_rewards)),
-                    y=1/3 * np.ones(len(episode_rewards)),
-                    mode='lines',
-                    opacity=0.8,
-                    name="Theorical Values",
-                    line=dict(width=1, color='black')
-                ))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(nothing)/nb_of_action_agent, mode='lines', name="Do_Nothing", opacity=0.6, line=dict(width = 1, color = 'darkblue')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_biD)/nb_of_action_agent, mode='lines', name="Order_Bid", opacity=0.6, line=dict(width = 1, color = 'darkred')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_asK)/nb_of_action_agent, mode='lines', name="Order_Ask", opacity=0.6, line=dict(width = 1, color = 'darkgreen')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=1/3*np.ones(len(np.arange(0,len(episode_rewards),1))), mode='lines', opacity=0.8, name="Theorical Values", line=dict(width = 1, color = 'black')))
+                
                 fig.update_layout(
                     title="Evolution of the decision of the Agent",
                     xaxis_title="Episodes",
-                    yaxis_title="Proportion of actions",
-                    plot_bgcolor='#D3D3D3',
-                    paper_bgcolor='#D3D3D3',
-                    xaxis=dict(showgrid=True, gridcolor='#808080'),
-                    yaxis=dict(showgrid=True, gridcolor='#808080')
-                )
-                fig.show()
-            else:
-                # Cas où l'agent ne peut pas choisir "Do Nothing" : seulement deux actions (0 et 1)
-                order_bid = []
-                order_ask = []
-                for actions in episode_actions:
-                    current = np.array(actions)
-                    order_bid.append(np.count_nonzero(current == 0))
-                    order_ask.append(np.count_nonzero(current == 1))
-                nb_of_action_agent = order_bid[-1] + order_ask[-1]
-                
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=np.arange(len(episode_rewards)),
-                    y=np.array(order_bid) / nb_of_action_agent,
-                    mode='lines',
-                    name="Order Bid",
-                    opacity=0.6,
-                    line=dict(width=1, color='darkred')
-                ))
-                fig.add_trace(go.Scatter(
-                    x=np.arange(len(episode_rewards)),
-                    y=np.array(order_ask) / nb_of_action_agent,
-                    mode='lines',
-                    name="Order Ask",
-                    opacity=0.6,
-                    line=dict(width=1, color='darkgreen')
-                ))
-                fig.add_trace(go.Scatter(
-                    x=np.arange(len(episode_rewards)),
-                    y=1/3 * np.ones(len(episode_rewards)),
-                    mode='lines',
-                    opacity=0.8,
-                    name="Theorical Values",
-                    line=dict(width=1, color='black')
-                ))
-                fig.update_layout(
-                    title="Evolution of the decision of the Agent",
-                    xaxis_title="Episodes",
-                    yaxis_title="Proportion of actions",
+                    yaxis_title="Pourcent of the action taken",
                     plot_bgcolor='#D3D3D3',
                     paper_bgcolor='#D3D3D3',
                     xaxis=dict(showgrid=True, gridcolor='#808080'),
@@ -353,17 +282,35 @@ class ActorCriticAgent:
                 )
                 fig.show()
             
-            # 4. Visualisation de l'évolution de la loss du réseau
+            else:
+                order_asK = []
+                order_biD = []
+                for i in range (len(tab_action_tot)):
+                    current_tab = np.array(tab_action_tot[i])
+                    order_biD.append(np.count_nonzero(current_tab == 0))
+                    order_asK.append(np.count_nonzero(current_tab == 1))
+                nb_of_action_agent = order_biD[-1] + order_asK[-1]
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_biD)/nb_of_action_agent, mode='lines', name="Order_Bid", opacity=0.6, line=dict(width = 1, color = 'darkred')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=np.array(order_asK)/nb_of_action_agent, mode='lines', name="Order_Ask", opacity=0.6, line=dict(width = 1, color = 'darkgreen')))
+                fig.add_trace(go.Scatter(x=np.arange(0,len(episode_rewards),1), y=1/3*np.ones(len(np.arange(0,len(episode_rewards),1))), mode='lines', opacity=0.8, name="Theorical Values", line=dict(width = 1, color = 'black')))
+                
+                fig.update_layout(
+                    title="Evolution of the decision of the Agent",
+                    xaxis_title="Episodes",
+                    yaxis_title="Pourcent of the action taken",
+                    plot_bgcolor='#D3D3D3',
+                    paper_bgcolor='#D3D3D3',
+                    xaxis=dict(showgrid=True, gridcolor='#808080'),
+                    yaxis=dict(showgrid=True, gridcolor='#808080')
+                )
+                fig.show()
+            
             fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=np.arange(len(total_losses)),
-                y=total_losses,
-                mode='lines',
-                line=dict(width=1, color='darkblue'),
-                name="NN Loss Evolution"
-            ))
+            fig.add_trace(go.Scatter(x=np.arange(0,len(critic_losses),1), y=critic_losses, mode='lines', line=dict(width = 1, color = 'darkblue')))
             fig.update_layout(
-                title="NN Loss Evolution",
+                title="Critic Loss Evolution",
                 xaxis_title="Episodes",
                 yaxis_title="Loss",
                 plot_bgcolor='#D3D3D3',
@@ -373,18 +320,31 @@ class ActorCriticAgent:
             )
             fig.show()
             
-            # Affichage des statistiques en console
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=np.arange(0,len(actor_losses),1), y=actor_losses, mode='lines', line=dict(width = 1, color = 'darkblue')))
+            fig.update_layout(
+                title="Actor Loss Evolution",
+                xaxis_title="Episodes",
+                yaxis_title="Loss",
+                plot_bgcolor='#D3D3D3',
+                paper_bgcolor='#D3D3D3',
+                xaxis=dict(showgrid=True, gridcolor='#808080'),
+                yaxis=dict(showgrid=True, gridcolor='#808080')
+            )
+            fig.show()
+            
             print("\n--- STATS ---\n")
             print(f"Action taken by the agent every {frequency_action}")
             print("Average Reward for the Random Strategy :", avg_random_price)
+            
+            
+            print("Actions taken of the last episode by the agent:")
             if not self.No_nothing:
-                print("Actions taken of the last episode by the agent:")
-                print(f"         Do Nothing ---> {np.array(nothing)[-1] / nb_of_action_agent:.2%}")
-            print(f"          Order Bid ---> {np.array(order_bid)[-1] / nb_of_action_agent:.2%}")
-            print(f"          Order Ask ---> {np.array(order_ask)[-1] / nb_of_action_agent:.2%}")
+                print(f"         Do Nothing ---> {np.array(nothing)[-1]/nb_of_action_agent}%")
+            
+            print(f"          Order Bid ---> {np.array(order_biD)[-1]/nb_of_action_agent}%")
+            print(f"          Order Ask ---> {np.array(order_asK)[-1]/nb_of_action_agent}%\n")
             print('________________________________________________________________')
-        
-        return episode_rewards
 
     def test(self, nb_event, frequency_action=1):
         """
@@ -413,7 +373,7 @@ class ActorCriticAgent:
         
         #pbar_2 = tqdm(total=nb_event, desc="Testing")
         while not done:
-            action = self.select_action(state)
+            action, _, _, _ = self.select_action(state)
             next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
             state = next_state
             total_reward += pnl
@@ -456,8 +416,8 @@ class ActorCriticAgent:
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
             fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Sell',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Buy',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Buy',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Sell',mode='markers'))
         fig.update_layout(
                 title="Price Evolution with the Agent Interaction",
                 xaxis_title="Time",
