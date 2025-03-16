@@ -17,7 +17,7 @@ class MarketEnv:
         self.current_step = 0
     
     def reset(self):
-        self.simulation.intiate_market(self.initial_ask, self.initial_bid)
+        self.simulation.initiate_market(self.initial_ask, self.initial_bid)
         self.agent.position = 100
         self.agent.order_active = None
         self.agent.cash = 0
