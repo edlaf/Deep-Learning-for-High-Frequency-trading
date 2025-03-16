@@ -101,6 +101,6 @@ project/
 - Paul Le Van Kiem
 - Théo Le Pendeven
 - David Kerriou
-- ERwin Poussi
+- Erwin Poussi
 
 ---
