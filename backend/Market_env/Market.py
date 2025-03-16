@@ -17,8 +17,8 @@ class MarketEnv:
         self.current_step = 0
     
     def reset(self):
-        self.simulation.initiate_market(self.initial_ask, self.initial_bid)
-        self.agent.position = 0
+        self.simulation.intiate_market(self.initial_ask, self.initial_bid)
+        self.agent.position = 100
         self.agent.order_active = None
         self.agent.cash = 0
         self.agent.entry_price = None
@@ -46,18 +46,18 @@ class MarketEnv:
             action_map = {0: "order_bid", 1:"order_ask"}
         action_name = action_map.get(action)
         self.simulation.execute_agent_action(action_name, self.agent)
-
+        #print(self.agent.cash + (self.agent.position * self.simulation.price))
         for _ in range (frequency_action-1):
             _ = self.simulation.step()
             self.current_step += 1
         new_net = self.agent.cash + (self.agent.position * self.simulation.price)
-        
-        reward = self.reward(action, frequency_action, prev_net, new_net)
+        reward = self.reward(action, frequency_action, prev_net, new_net, No_nothing)
         pnl = new_net - prev_net
         state = self.get_state()
         done = self.current_step >= self.nb_steps
         self.current_step += 1
-
+        #print("PNL",pnl)
+        #print("Prix",self.simulation.price)
         return state, reward, done, {}, pnl
 
     def step_trained(self, action, frequency_action, nb_events, No_nothing = False):
@@ -73,8 +73,7 @@ class MarketEnv:
             simulated_step.append(self.simulation.step())
             self.current_step += 1
         new_net = self.agent.cash + (self.agent.position * self.simulation.price)
-        
-        reward = self.reward(action, frequency_action, prev_net, new_net)
+        reward = self.reward(action, frequency_action, prev_net, new_net, No_nothing)
         pnl = new_net - prev_net
         state = self.get_state()
         done = self.current_step >= nb_events
@@ -82,6 +81,25 @@ class MarketEnv:
 
         return state, reward, done, {}, simulated_step, pnl
 
-    def reward(self, action, frequency_action, prev_net, new_net):
-        reward = new_net - prev_net #- ((self.agent.position-3)**2) * 1
+    def reward(self, action, frequency_action, prev_net, new_net, No_nothing):
+        reward = new_net - prev_net
+        if No_nothing:
+            return reward
+        
+        target_pnl = 200
+        stop_loss = -150
+        
+        if action == 0 and reward < target_pnl:
+            penalty = (target_pnl - reward) * 5
+            reward -= penalty
+        
+        if action == 2 and reward > target_pnl:
+            penalty = (reward - target_pnl) * 5
+            reward -= penalty
+        
+        if action != 0 and reward < stop_loss:
+            penalty = (stop_loss - reward) * 5
+            reward -= penalty
+        
         return reward
+
