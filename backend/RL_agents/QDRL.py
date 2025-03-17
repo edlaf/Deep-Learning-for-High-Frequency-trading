@@ -453,8 +453,8 @@ class Deep_Q_Learning_Agent:
             print('________________________________________________________________')
             
     def test(self, nb_event, frequency_action = 2, retourner = False):
-        print(f"\n                                             --- TESTING THE AGENT OVER A SIMULATION OF {nb_event} EVENTS ---\n")
-        pbar = tqdm(range(nb_event), desc="---> Testing")
+        #print(f"\n                                             --- TESTING THE AGENT OVER A SIMULATION OF {nb_event} EVENTS ---\n")
+        # pbar = tqdm(range(nb_event), desc="---> Testing")
         state = self.env.reset()
         total_reward = 0.0
         done = False
@@ -503,7 +503,7 @@ class Deep_Q_Learning_Agent:
             pnl_time.append(next_state[1])
             state = next_state
 
-            pbar.set_postfix(total_reward=f"{total_reward:.2f}")
+            # pbar.set_postfix(total_reward=f"{total_reward:.2f}")
         if retourner:
             return total_reward
         fig = go.Figure()
@@ -536,19 +536,18 @@ class Deep_Q_Learning_Agent:
             )
         fig.show()
         
-    def random_action(self, frequency_action = 2):
+    def random_action(self, nb_event, frequency_action = 2):
         random_final_rewards = []
-        for _ in range(1000):
-            state = self.env.reset()
-            done = False
-            total_reward = 0.0
-            while not done:
-                random_action = random.randrange(self.action_dim)
-                state, reward, done, _, pnl = self.env.step(random_action, frequency_action, No_nothing = self.No_nothing)
-                total_reward += pnl
-                random_final_rewards.append(total_reward)
+        state = self.env.reset()
+        done = False
+        total_reward = 0.0
+        while not done:
+            random_action = random.randrange(self.action_dim)
+            next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(random_action, frequency_action, nb_event, No_nothing = self.No_nothing)    
+            total_reward += pnl
+            random_final_rewards.append(total_reward)
         avg_random_price = np.mean(random_final_rewards)
-        return avg_random_price
+        return random_final_rewards[-1]
 
 def compare_networks(tab_network, nb_episode = 1000, window_size = 20, frequency_action = 2, No_nothing = False):
     res = []
