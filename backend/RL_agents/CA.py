@@ -145,9 +145,6 @@ class ActorCriticAgent:
         total_losses = []  # pour la visualisation de la loss totale
         episode_actions = []  # pour enregistrer les actions par épisode
 
-        # Calcul de la performance de la stratégie aléatoire pour comparaison
-        self.average_pnl_random, self.average_time = self.random_action(nb_episode=nb_episode, frequency_action=frequency_action)
-
         if visu:
             print("                                                            --- ACTOR-CRITIC AGENT ---\n")
             print(f"\n--- TRAINING THE AGENT OVER {nb_episode} EPISODES OF LENGTH {self.nb_of_action} WITH A FREQUENCY OF {frequency_action} ({int(nb_episode*self.nb_of_action/frequency_action)} training data) ---")
@@ -200,9 +197,9 @@ class ActorCriticAgent:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
             
             # Calcul des pertes Actor et Critic avec bonus d'entropie
-            actor_loss = - (log_probs_tensor * advantages.detach()).sum() + self.beta * entropies_tensor.sum()
+            actor_loss = - (log_probs_tensor * advantages.detach()).sum() - self.beta * entropies_tensor.sum()
             critic_loss = F.mse_loss(values_tensor.squeeze(), returns)
-            loss = -(actor_loss + critic_loss)
+            loss = (actor_loss + critic_loss)
             
             # Mise à jour des réseaux avec clipping des gradients
             self.optimizer_actor.zero_grad()
@@ -212,13 +209,12 @@ class ActorCriticAgent:
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_grad_norm)
             self.optimizer_actor.step()
             self.optimizer_critic.step()
-            
-            total_reward = sum(rewards)
-            episode_rewards.append(total_reward)
+        
+            episode_rewards.append(tot_reward)
             actor_losses.append(actor_loss.item())
             critic_losses.append(critic_loss.item())
             
-            pbar.set_postfix({"Total Reward": f"{total_reward:.2f}"})
+            pbar.set_postfix({"Total Reward": f"{tot_reward:.2f}"})
         pbar.close()
         
         # ----------------------- Visualisations avec Plotly -----------------------

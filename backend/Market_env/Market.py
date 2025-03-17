@@ -18,7 +18,7 @@ class MarketEnv:
     
     def reset(self):
         self.simulation.initiate_market(self.initial_ask, self.initial_bid)
-        self.agent.position = 100
+        self.agent.position = 0
         self.agent.order_active = None
         self.agent.cash = 0
         self.agent.entry_price = None
@@ -56,8 +56,8 @@ class MarketEnv:
         state = self.get_state()
         done = self.current_step >= self.nb_steps
         self.current_step += 1
-        #print("PNL",pnl)
-        #print("Prix",self.simulation.price)
+        # print("PNL",pnl)
+        # print("Prix",self.simulation.price)
         return state, reward, done, {}, pnl
 
     def step_trained(self, action, frequency_action, nb_events, No_nothing = False):
@@ -90,7 +90,7 @@ class MarketEnv:
         stop_loss = -150
         
         if action == 0 and reward < target_pnl:
-            penalty = (target_pnl - reward) * 5
+            penalty = (target_pnl - reward) * 10
             reward -= penalty
         
         if action == 2 and reward > target_pnl:
