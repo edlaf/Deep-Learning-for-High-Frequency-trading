@@ -452,7 +452,7 @@ class Deep_Q_Learning_Agent:
             print(f"          Order Ask ---> {np.array(order_asK)[-1]/nb_of_action_agent}%\n")
             print('________________________________________________________________')
             
-    def test(self, nb_event, frequency_action = 2):
+    def test(self, nb_event, frequency_action = 2, retourner = False):
         print(f"\n                                             --- TESTING THE AGENT OVER A SIMULATION OF {nb_event} EVENTS ---\n")
         pbar = tqdm(range(nb_event), desc="---> Testing")
         state = self.env.reset()
@@ -504,6 +504,8 @@ class Deep_Q_Learning_Agent:
             state = next_state
 
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
+        if retourner:
+            return total_reward
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
