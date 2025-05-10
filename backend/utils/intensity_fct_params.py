@@ -46,14 +46,14 @@ def params_qr():
     price_0 = 100.0
     tick = 1
     theta = 0.8
-    nb_of_action = 1000
+    nb_of_action = 5000
     liquidy_last_lim = 50
-    size_max = [5, 4, 8]
+    size_max = [30, 30, 30]
     lambda_event = [10 for i in range(34)] + [100 for i in range(15)] + [1000]
     event_prob = 1/200
     
-    initial_ask = np.array([1, 2, 3]) * 100
-    initial_bid = np.array([1, 2, 3]) * 100
+    initial_ask = [100, 200, 300]
+    initial_bid = [100, 200, 300]
     return intensity_cancel,intensity_order,intensity_add, price_0, tick, theta, nb_of_action, liquidy_last_lim, size_max, lambda_event, event_prob, initial_ask, initial_bid
 
 def params_QDRL(No_nothing = False):
@@ -69,4 +69,5 @@ def params_QDRL(No_nothing = False):
     batch_size = 32
     replay_capacity = 10000
     target_update = 10
-    return state_dim, action_dim, lr, gamma, epsilon, epsilon_decay, epsilon_min, batch_size, replay_capacity, target_update
+    beta = 0.01
+    return state_dim, action_dim, lr, gamma, epsilon, epsilon_decay, epsilon_min, batch_size, replay_capacity, target_update, beta

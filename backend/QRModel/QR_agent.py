@@ -16,8 +16,7 @@ class TradingAgent:
     def __init__(self, transaction_cost_cancel=0, transaction_cost_market=0):
         self.position = 0
         self.order_active = None
-        self.cash = 0.0
-        self.cash_depart = 0.0
+        self.cash = 0
         self.entry_price = None
         self.transaction_cost_cancel = transaction_cost_cancel
         self.transaction_cost_market = transaction_cost_market
@@ -78,7 +77,7 @@ class QrWithAgent(qr.Qr):
             agent.order_active_ask = None
 
     def run_market_with_agent(self, initial_ask, initial_bid, agent):
-        self.intiate_market(initial_ask, initial_bid)
+        self.initiate_market(initial_ask, initial_bid)
         for i in range(self.nb_of_action):
             market_step = self.step()
             market_state = {

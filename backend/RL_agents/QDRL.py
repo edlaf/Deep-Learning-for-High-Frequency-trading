@@ -144,6 +144,27 @@ class QNetwork_Transformer(nn.Module):
         x = self.transformer_encoder(x)
         x = x.mean(dim=0)
         return self.fc(x)
+class QNetwork_CNN_RNN(nn.Module):
+    def __init__(self, state_dim, action_dim, seq_length=4, rnn_hidden=64):
+        super(QNetwork_CNN_RNN, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=2, stride=1)
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=2, stride=1)
+        self.cnn_feature_size = 32
+        self.rnn = nn.GRU(input_size=self.cnn_feature_size, hidden_size=rnn_hidden, batch_first=True)
+        self.fc = nn.Linear(rnn_hidden, action_dim)
+        
+    def forward(self, x):
+        batch_size, seq_length, state_dim = x.shape
+        x = x.view(batch_size * seq_length, state_dim)
+        x = x.view(batch_size * seq_length, 1, 3, 3)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = x.view(batch_size * seq_length, -1)
+        x = x.view(batch_size, seq_length, -1)
+        rnn_out, h = self.rnn(x)
+        h_last = h[-1]
+        q = self.fc(h_last)
+        return q
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -168,11 +189,11 @@ class Deep_Q_Learning_Agent:
         self.simulation = qr_agent.QrWithAgent(self.intensity_cancel, self.intensity_order, self.intensity_add,
                                 self.price_0, self.tick, self.theta, self.nb_of_action, self.liquidy_last_lim,
                                 self.size_max, self.lambda_event, self.event_prob)
-        self.agent = qr_agent.TradingAgent()
+        self.agent = qr_agent.TradingAgent(self.price_0)
         
         self.nb_steps = self.nb_of_action
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
-        self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update = param.params_QDRL(No_nothing = No_nothing)
+        self.state_dim, self.action_dim, self.lr, self.gamma, self.epsilon, self.epsilon_decay, self.epsilon_min, self.batch_size, self.replay_capacity, self.target_update, self.beta = param.params_QDRL(No_nothing = No_nothing)
         
         if torch.backends.mps.is_available():
             self.device = torch.device("mps")
@@ -217,6 +238,11 @@ class Deep_Q_Learning_Agent:
             self.target_network.load_state_dict(self.q_network.state_dict())
             self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
         elif network_architecture == 'Transformer':
+            self.q_network = QNetwork_Transformer(self.state_dim, 64, 8, 2, self.action_dim).to(self.device)
+            self.target_network = QNetwork_Transformer(self.state_dim, 64, 8, 2, self.action_dim).to(self.device)
+            self.target_network.load_state_dict(self.q_network.state_dict())
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.lr)
+        elif network_architecture == 'CNN+RNN':
             self.q_network = QNetwork_Transformer(self.state_dim, 64, 8, 2, self.action_dim).to(self.device)
             self.target_network = QNetwork_Transformer(self.state_dim, 64, 8, 2, self.action_dim).to(self.device)
             self.target_network.load_state_dict(self.q_network.state_dict())
@@ -446,43 +472,44 @@ class Deep_Q_Learning_Agent:
         while not done:
             action = self.select_action(state, 0)
             next_state, reward, done, _, simulated_step, pnl = self.env.step_trained(action, frequency_action, nb_event, No_nothing = self.No_nothing)
-            state = next_state
+            
             total_reward += pnl
             if not self.No_nothing:
                 if action != 0:
-                    price_evolution.append(next_state[0])
-                    price_evolution_time.append(next_state[1])
+                    price_evolution.append(state[0])
+                    price_evolution_time.append(state[1])
                 if action == 0:
-                    agent_action_nothing.append(next_state[0])
-                    agent_action_nothing_time.append(next_state[1])
+                    agent_action_nothing.append(state[0])
+                    agent_action_nothing_time.append(state[1])
                 if action == 1:
-                    agent_action_sell.append(next_state[0])
-                    agent_action_sell_time.append(next_state[1])
+                    agent_action_sell.append(state[0])
+                    agent_action_sell_time.append(state[1])
                 if action == 2:
-                    agent_action_buy.append(next_state[0])
-                    agent_action_buy_time.append(next_state[1])
+                    agent_action_buy.append(state[0])
+                    agent_action_buy_time.append(state[1])
             else:
-                price_evolution.append(next_state[0])
-                price_evolution_time.append(next_state[1])
+                price_evolution.append(state[0])
+                price_evolution_time.append(state[1])
                 if action == 0:
-                    agent_action_sell.append(next_state[0])
-                    agent_action_sell_time.append(next_state[1])
+                    agent_action_sell.append(state[0])
+                    agent_action_sell_time.append(state[1])
                 if action == 1:
-                    agent_action_buy.append(next_state[0])
-                    agent_action_buy_time.append(next_state[1])
+                    agent_action_buy.append(state[0])
+                    agent_action_buy_time.append(state[1])
             for j in range (len(simulated_step)):
                 price_evolution.append(simulated_step[j][4])
                 price_evolution_time.append(simulated_step[j][0])
             pnl_balance.append(total_reward)
             pnl_time.append(next_state[1])
+            state = next_state
 
             pbar.set_postfix(total_reward=f"{total_reward:.2f}")
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=price_evolution_time, y=price_evolution, name = 'Price',mode='lines', line=dict(width = 1, color = 'black')))
         if not self.No_nothing:
             fig.add_trace(go.Scatter(x=agent_action_nothing_time, y=agent_action_nothing, name = 'Do Nothing',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Sell',mode='markers'))
-        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Buy',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_buy_time, y=agent_action_buy, name = 'Buy',mode='markers'))
+        fig.add_trace(go.Scatter(x=agent_action_sell_time, y=agent_action_sell, name = 'Sell',mode='markers'))
         fig.update_layout(
                 title="Price Evolution with the Agent Interaction",
                 xaxis_title="Time",
@@ -557,7 +584,7 @@ class DQN_Agent:
         self.simulation = qr_agent.QrWithAgent(self.intensity_cancel, self.intensity_order, self.intensity_add,
                                 self.price_0, self.tick, self.theta, self.nb_of_action, self.liquidy_last_lim,
                                 self.size_max, self.lambda_event, self.event_prob)
-        self.agent = qr_agent.TradingAgent()
+        self.agent = qr_agent.TradingAgent(self.price_0)
         
         self.nb_steps = self.nb_of_action
         self.env = market.MarketEnv(self.simulation, self.agent, self.initial_ask, self.initial_bid, self.nb_steps)
@@ -658,7 +685,7 @@ class DQN_Agent:
 
         # torch.save(self.q_network.state_dict(), 'model.pth')
         random_final_rewards = []
-        nb_sim = 1000
+        nb_sim = 100000
         for _ in range(nb_sim):
             state = self.env.reset()
             done = False
@@ -671,6 +698,7 @@ class DQN_Agent:
             self.average_time += state[1]/nb_sim
         avg_random_price = np.mean(random_final_rewards)
         self.average_pnl_random = avg_random_price
+        print(avg_random_price)
         if comparaison:
             return episode_rewards
         if visu:
